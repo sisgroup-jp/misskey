@@ -1,49 +1,61 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../../define';
-import { GalleryPosts } from '@/models/index';
-import { makePaginationQuery } from '../../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { GalleryPostsRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { GalleryPostEntityService } from '@/core/entities/GalleryPostEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['account', 'gallery'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'read:gallery',
 
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
+	res: {
+		type: 'array',
+		optional: false, nullable: false,
+		items: {
+			type: 'object',
+			optional: false, nullable: false,
+			ref: 'GalleryPost',
 		},
 	},
+} as const;
 
-	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
-		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
-			ref: 'GalleryPost'
-		}
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.galleryPostsRepository)
+		private galleryPostsRepository: GalleryPostsRepository,
+
+		private galleryPostEntityService: GalleryPostEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.galleryPostsRepository.createQueryBuilder('post'), ps.sinceId, ps.untilId)
+				.andWhere('post.userId = :meId', { meId: me.id });
+
+			const posts = await query
+				.limit(ps.limit)
+				.getMany();
+
+			return await this.galleryPostEntityService.packMany(posts, me);
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	const query = makePaginationQuery(GalleryPosts.createQueryBuilder('post'), ps.sinceId, ps.untilId)
-		.andWhere(`post.userId = :meId`, { meId: user.id });
-
-	const posts = await query
-		.take(ps.limit!)
-		.getMany();
-
-	return await GalleryPosts.packMany(posts, user);
-});
+}

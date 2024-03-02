@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class wordMute21595782306083 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class wordMute21595782306083 {
     constructor() {
         this.name = 'wordMute21595782306083';
     }
@@ -15,4 +18,3 @@ class wordMute21595782306083 {
         await queryRunner.query(`DROP TYPE "muted_note_reason_enum"`);
     }
 }
-exports.wordMute21595782306083 = wordMute21595782306083;

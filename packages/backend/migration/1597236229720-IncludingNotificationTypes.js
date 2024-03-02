@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class IncludingNotificationTypes1597236229720 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class IncludingNotificationTypes1597236229720 {
     constructor() {
         this.name = 'IncludingNotificationTypes1597236229720';
     }
@@ -13,4 +16,3 @@ class IncludingNotificationTypes1597236229720 {
         await queryRunner.query(`DROP TYPE "user_profile_includingnotificationtypes_enum"`);
     }
 }
-exports.IncludingNotificationTypes1597236229720 = IncludingNotificationTypes1597236229720;

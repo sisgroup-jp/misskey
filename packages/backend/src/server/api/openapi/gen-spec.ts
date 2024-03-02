@@ -1,116 +1,96 @@
-import endpoints from '../endpoints';
-import { Context } from 'cafy';
-import config from '@/config/index';
-import { errors as basicErrors } from './errors';
-import { schemas, convertSchemaToOpenApiSchema } from './schemas';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 
-export function genOpenapiSpec(lang = 'ja-JP') {
+import type { Config } from '@/config.js';
+import endpoints, { IEndpoint } from '../endpoints.js';
+import { errors as basicErrors } from './errors.js';
+import { getSchemas, convertSchemaToOpenApiSchema } from './schemas.js';
+
+export function genOpenapiSpec(config: Config, includeSelfRef = false) {
 	const spec = {
-		openapi: '3.0.0',
+		openapi: '3.1.0',
 
 		info: {
-			version: 'v1',
+			version: config.version,
 			title: 'Misskey API',
-			'x-logo': { url: '/static-assets/api-doc.png' }
+			'x-logo': { url: '/static-assets/api-doc.png' },
 		},
 
 		externalDocs: {
 			description: 'Repository',
-			url: 'https://github.com/misskey-dev/misskey'
+			url: 'https://github.com/misskey-dev/misskey',
 		},
 
 		servers: [{
-			url: config.apiUrl
+			url: config.apiUrl,
 		}],
 
 		paths: {} as any,
 
 		components: {
-			schemas: schemas,
+			schemas: getSchemas(includeSelfRef),
 
 			securitySchemes: {
-				ApiKeyAuth: {
-					type: 'apiKey',
-					in: 'body',
-					name: 'i'
-				}
-			}
-		}
+				bearerAuth: {
+					type: 'http',
+					scheme: 'bearer',
+				},
+			},
+		},
 	};
 
-	function genProps(props: { [key: string]: Context; }) {
-		const properties = {} as any;
-
-		for (const [k, v] of Object.entries(props)) {
-			properties[k] = genProp(v);
-		}
-
-		return properties;
-	}
-
-	function genProp(param: Context): any {
-		const required = param.name === 'Object' ? (param as any).props ? Object.entries((param as any).props).filter(([k, v]: any) => !v.isOptional).map(([k, v]) => k) : [] : [];
-		return {
-			description: (param.data || {}).desc,
-			default: (param.data || {}).default,
-			deprecated: (param.data || {}).deprecated,
-			...((param.data || {}).default ? { default: (param.data || {}).default } : {}),
-			type: param.name === 'ID' ? 'string' : param.name.toLowerCase(),
-			...(param.name === 'ID' ? { example: 'xxxxxxxxxx', format: 'id' } : {}),
-			nullable: param.isNullable,
-			...(param.name === 'String' ? {
-				...((param as any).enum ? { enum: (param as any).enum } : {}),
-				...((param as any).minLength ? { minLength: (param as any).minLength } : {}),
-				...((param as any).maxLength ? { maxLength: (param as any).maxLength } : {}),
-			} : {}),
-			...(param.name === 'Number' ? {
-				...((param as any).minimum ? { minimum: (param as any).minimum } : {}),
-				...((param as any).maximum ? { maximum: (param as any).maximum } : {}),
-			} : {}),
-			...(param.name === 'Object' ? {
-				...(required.length > 0 ? { required } : {}),
-				properties: (param as any).props ? genProps((param as any).props) : {}
-			} : {}),
-			...(param.name === 'Array' ? {
-				items: (param as any).ctx ? genProp((param as any).ctx) : {}
-			} : {})
-		};
-	}
-
-	for (const endpoint of endpoints.filter(ep => !ep.meta.secure)) {
-		const porops = {} as any;
+	// 書き換えたりするのでディープコピーしておく。そのまま編集するとメモリ上の値が汚れて次回以降の出力に影響する
+	const copiedEndpoints = JSON.parse(JSON.stringify(endpoints)) as IEndpoint[];
+	for (const endpoint of copiedEndpoints) {
 		const errors = {} as any;
 
 		if (endpoint.meta.errors) {
 			for (const e of Object.values(endpoint.meta.errors)) {
 				errors[e.code] = {
 					value: {
-						error: e
-					}
+						error: e,
+					},
 				};
 			}
 		}
 
-		if (endpoint.meta.params) {
-			for (const [k, v] of Object.entries(endpoint.meta.params)) {
-				if (v.validator.data == null) v.validator.data = {};
-				if (v.desc) v.validator.data.desc = v.desc[lang];
-				if (v.deprecated) v.validator.data.deprecated = v.deprecated;
-				if (v.default) v.validator.data.default = v.default;
-				porops[k] = v.validator;
-			}
+		const resSchema = endpoint.meta.res ? convertSchemaToOpenApiSchema(endpoint.meta.res, 'res', includeSelfRef) : {};
+
+		let desc = (endpoint.meta.description ? endpoint.meta.description : 'No description provided.') + '\n\n';
+
+		if (endpoint.meta.secure) {
+			desc += '**Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.\n';
 		}
 
-		const required = endpoint.meta.params ? Object.entries(endpoint.meta.params).filter(([k, v]) => !v.validator.isOptional).map(([k, v]) => k) : [];
-
-		const resSchema = endpoint.meta.res ? convertSchemaToOpenApiSchema(endpoint.meta.res) : {};
-
-		let desc = (endpoint.meta.desc ? endpoint.meta.desc[lang] : 'No description provided.') + '\n\n';
 		desc += `**Credential required**: *${endpoint.meta.requireCredential ? 'Yes' : 'No'}*`;
 		if (endpoint.meta.kind) {
 			const kind = endpoint.meta.kind;
 			desc += ` / **Permission**: *${kind}*`;
 		}
+
+		const requestType = endpoint.meta.requireFile ? 'multipart/form-data' : 'application/json';
+		const schema = { ...convertSchemaToOpenApiSchema(endpoint.params, 'param', false) };
+
+		if (endpoint.meta.requireFile) {
+			schema.properties = {
+				...schema.properties,
+				file: {
+					type: 'string',
+					format: 'binary',
+					description: 'The file contents.',
+				},
+			};
+			schema.required = [...schema.required ?? [], 'file'];
+		}
+
+		if (schema.required && schema.required.length <= 0) {
+			// 空配列は許可されない
+			schema.required = undefined;
+		}
+
+		const hasBody = (schema.type === 'object' && schema.properties && Object.keys(schema.properties).length >= 1);
 
 		const info = {
 			operationId: endpoint.name,
@@ -118,86 +98,89 @@ export function genOpenapiSpec(lang = 'ja-JP') {
 			description: desc,
 			externalDocs: {
 				description: 'Source code',
-				url: `https://github.com/misskey-dev/misskey/blob/develop/src/server/api/endpoints/${endpoint.name}.ts`
+				url: `https://github.com/misskey-dev/misskey/blob/develop/packages/backend/src/server/api/endpoints/${endpoint.name}.ts`,
 			},
 			...(endpoint.meta.tags ? {
-				tags: [endpoint.meta.tags[0]]
+				tags: [endpoint.meta.tags[0]],
 			} : {}),
 			...(endpoint.meta.requireCredential ? {
 				security: [{
-					ApiKeyAuth: []
-				}]
+					bearerAuth: [],
+				}],
 			} : {}),
-			requestBody: {
-				required: true,
-				content: {
-					'application/json': {
-						schema: {
-							type: 'object',
-							...(required.length > 0 ? { required } : {}),
-							properties: endpoint.meta.params ? genProps(porops) : {}
-						}
-					}
-				}
-			},
+			...(hasBody ? {
+				requestBody: {
+					required: true,
+					content: {
+						[requestType]: {
+							schema,
+						},
+					},
+				},
+			} : {}),
 			responses: {
 				...(endpoint.meta.res ? {
 					'200': {
 						description: 'OK (with results)',
 						content: {
 							'application/json': {
-								schema: resSchema
-							}
-						}
-					}
+								schema: resSchema,
+							},
+						},
+					},
 				} : {
 					'204': {
 						description: 'OK (without any results)',
-					}
+					},
 				}),
+				...(endpoint.meta.res?.optional === true || endpoint.meta.res?.nullable === true ? {
+					'204': {
+						description: 'OK (without any results)',
+					},
+				} : {}),
 				'400': {
 					description: 'Client error',
 					content: {
 						'application/json': {
 							schema: {
-								$ref: '#/components/schemas/Error'
+								$ref: '#/components/schemas/Error',
 							},
-							examples: { ...errors, ...basicErrors['400'] }
-						}
-					}
+							examples: { ...errors, ...basicErrors['400'] },
+						},
+					},
 				},
 				'401': {
 					description: 'Authentication error',
 					content: {
 						'application/json': {
 							schema: {
-								$ref: '#/components/schemas/Error'
+								$ref: '#/components/schemas/Error',
 							},
-							examples: basicErrors['401']
-						}
-					}
+							examples: basicErrors['401'],
+						},
+					},
 				},
 				'403': {
 					description: 'Forbidden error',
 					content: {
 						'application/json': {
 							schema: {
-								$ref: '#/components/schemas/Error'
+								$ref: '#/components/schemas/Error',
 							},
-							examples: basicErrors['403']
-						}
-					}
+							examples: basicErrors['403'],
+						},
+					},
 				},
 				'418': {
 					description: 'I\'m Ai',
 					content: {
 						'application/json': {
 							schema: {
-								$ref: '#/components/schemas/Error'
+								$ref: '#/components/schemas/Error',
 							},
-							examples: basicErrors['418']
-						}
-					}
+							examples: basicErrors['418'],
+						},
+					},
 				},
 				...(endpoint.meta.limit ? {
 					'429': {
@@ -205,29 +188,32 @@ export function genOpenapiSpec(lang = 'ja-JP') {
 						content: {
 							'application/json': {
 								schema: {
-									$ref: '#/components/schemas/Error'
+									$ref: '#/components/schemas/Error',
 								},
-								examples: basicErrors['429']
-							}
-						}
-					}
+								examples: basicErrors['429'],
+							},
+						},
+					},
 				} : {}),
 				'500': {
 					description: 'Internal server error',
 					content: {
 						'application/json': {
 							schema: {
-								$ref: '#/components/schemas/Error'
+								$ref: '#/components/schemas/Error',
 							},
-							examples: basicErrors['500']
-						}
-					}
+							examples: basicErrors['500'],
+						},
+					},
 				},
-			}
+			},
 		};
 
 		spec.paths['/' + endpoint.name] = {
-			post: info
+			...(endpoint.meta.allowGet ? {
+				get: info,
+			} : {}),
+			post: info,
 		};
 	}
 

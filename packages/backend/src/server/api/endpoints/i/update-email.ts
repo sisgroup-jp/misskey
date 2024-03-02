@@ -1,94 +1,133 @@
-import $ from 'cafy';
-import { publishMainStream } from '@/services/stream';
-import define from '../../define';
-import rndstr from 'rndstr';
-import config from '@/config/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
 import ms from 'ms';
-import * as bcrypt from 'bcryptjs';
-import { Users, UserProfiles } from '@/models/index';
-import { sendEmail } from '@/services/send-email';
-import { ApiError } from '../../error';
-import { validateEmailForAccount } from '@/services/validate-email-for-account';
+import bcrypt from 'bcryptjs';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { UserProfilesRepository } from '@/models/_.js';
+import { UserEntityService } from '@/core/entities/UserEntityService.js';
+import { EmailService } from '@/core/EmailService.js';
+import type { Config } from '@/config.js';
+import { DI } from '@/di-symbols.js';
+import { GlobalEventService } from '@/core/GlobalEventService.js';
+import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
+import { UserAuthService } from '@/core/UserAuthService.js';
+import { ApiError } from '../../error.js';
 
 export const meta = {
-	requireCredential: true as const,
+	requireCredential: true,
 
 	secure: true,
 
 	limit: {
 		duration: ms('1hour'),
-		max: 3
-	},
-
-	params: {
-		password: {
-			validator: $.str
-		},
-
-		email: {
-			validator: $.optional.nullable.str
-		},
+		max: 3,
 	},
 
 	errors: {
 		incorrectPassword: {
 			message: 'Incorrect password.',
 			code: 'INCORRECT_PASSWORD',
-			id: 'e54c1d7e-e7d6-4103-86b6-0a95069b4ad3'
+			id: 'e54c1d7e-e7d6-4103-86b6-0a95069b4ad3',
 		},
 
 		unavailable: {
 			message: 'Unavailable email address.',
 			code: 'UNAVAILABLE',
-			id: 'a2defefb-f220-8849-0af6-17f816099323'
+			id: 'a2defefb-f220-8849-0af6-17f816099323',
 		},
-	}
-};
+	},
 
-export default define(meta, async (ps, user) => {
-	const profile = await UserProfiles.findOneOrFail(user.id);
+	res: {
+		type: 'object',
+		ref: 'MeDetailed',
+	},
+} as const;
 
-	// Compare password
-	const same = await bcrypt.compare(ps.password, profile.password!);
+export const paramDef = {
+	type: 'object',
+	properties: {
+		password: { type: 'string' },
+		email: { type: 'string', nullable: true },
+		token: { type: 'string', nullable: true },
+	},
+	required: ['password'],
+} as const;
 
-	if (!same) {
-		throw new ApiError(meta.errors.incorrectPassword);
-	}
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.config)
+		private config: Config,
 
-	if (ps.email != null) {
-		const available = await validateEmailForAccount(ps.email);
-		if (!available) {
-			throw new ApiError(meta.errors.unavailable);
-		}
-	}
+		@Inject(DI.userProfilesRepository)
+		private userProfilesRepository: UserProfilesRepository,
 
-	await UserProfiles.update(user.id, {
-		email: ps.email,
-		emailVerified: false,
-		emailVerifyCode: null
-	});
+		private userEntityService: UserEntityService,
+		private emailService: EmailService,
+		private userAuthService: UserAuthService,
+		private globalEventService: GlobalEventService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const token = ps.token;
+			const profile = await this.userProfilesRepository.findOneByOrFail({ userId: me.id });
 
-	const iObj = await Users.pack(user.id, user, {
-		detail: true,
-		includeSecrets: true
-	});
+			if (profile.twoFactorEnabled) {
+				if (token == null) {
+					throw new Error('authentication failed');
+				}
 
-	// Publish meUpdated event
-	publishMainStream(user.id, 'meUpdated', iObj);
+				try {
+					await this.userAuthService.twoFactorAuthenticate(profile, token);
+				} catch (e) {
+					throw new Error('authentication failed');
+				}
+			}
 
-	if (ps.email != null) {
-		const code = rndstr('a-z0-9', 16);
+			const passwordMatched = await bcrypt.compare(ps.password, profile.password!);
+			if (!passwordMatched) {
+				throw new ApiError(meta.errors.incorrectPassword);
+			}
 
-		await UserProfiles.update(user.id, {
-			emailVerifyCode: code
+			if (ps.email != null) {
+				const res = await this.emailService.validateEmailForAccount(ps.email);
+				if (!res.available) {
+					throw new ApiError(meta.errors.unavailable);
+				}
+			}
+
+			await this.userProfilesRepository.update(me.id, {
+				email: ps.email,
+				emailVerified: false,
+				emailVerifyCode: null,
+			});
+
+			const iObj = await this.userEntityService.pack(me.id, me, {
+				schema: 'MeDetailed',
+				includeSecrets: true,
+			});
+
+			// Publish meUpdated event
+			this.globalEventService.publishMainStream(me.id, 'meUpdated', iObj);
+
+			if (ps.email != null) {
+				const code = secureRndstr(16, { chars: L_CHARS });
+
+				await this.userProfilesRepository.update(me.id, {
+					emailVerifyCode: code,
+				});
+
+				const link = `${this.config.url}/verify-email/${code}`;
+
+				this.emailService.sendEmail(ps.email, 'Email verification',
+					`To verify email, please click this link:<br><a href="${link}">${link}</a>`,
+					`To verify email, please click this link: ${link}`);
+			}
+
+			return iObj;
 		});
-
-		const link = `${config.url}/verify-email/${code}`;
-
-		sendEmail(ps.email, 'Email verification',
-			`To verify email, please click this link:<br><a href="${link}">${link}</a>`,
-			`To verify email, please click this link: ${link}`);
 	}
-
-	return iObj;
-});
+}

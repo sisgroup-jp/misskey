@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class channel1596548170836 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class channel1596548170836 {
     constructor() {
         this.name = 'channel1596548170836';
     }
@@ -55,4 +58,3 @@ class channel1596548170836 {
         await queryRunner.query(`DROP TABLE "channel"`);
     }
 }
-exports.channel1596548170836 = channel1596548170836;

@@ -1,177 +1,257 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { Users } from '@/models/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import type { UsersRepository, SigninsRepository, UserProfilesRepository } from '@/models/_.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { DI } from '@/di-symbols.js';
+import { RoleService } from '@/core/RoleService.js';
+import { RoleEntityService } from '@/core/entities/RoleEntityService.js';
+import { IdService } from '@/core/IdService.js';
+import { notificationRecieveConfig } from '@/models/json-schema/user.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 	requireModerator: true,
-
-	params: {
-		userId: {
-			validator: $.type(ID),
-		},
-	},
+	kind: 'read:admin:show-user',
 
 	res: {
-		type: 'object' as const,
-		nullable: false as const, optional: false as const,
+		type: 'object',
+		nullable: false, optional: false,
 		properties: {
-			id: {
-				type: 'string' as const,
-				nullable: false as const, optional: false as const,
-				format: 'id'
+			email: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
-			createdAt: {
-				type: 'string' as const,
-				nullable: false as const, optional: false as const,
-				format: 'date-time'
+			emailVerified: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			updatedAt: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const,
-				format: 'date-time'
+			autoAcceptFollowed: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			lastFetchedAt: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
+			noCrawle: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			username: {
-				type: 'string' as const,
-				nullable: false as const, optional: false as const
+			preventAiLearning: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			name: {
-				type: 'string' as const,
-				nullable: false as const, optional: false as const
+			alwaysMarkNsfw: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			folowersCount: {
-				type: 'number' as const,
-				nullable: false as const, optional: false as const
+			autoSensitive: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			followingCount: {
-				type: 'number' as const,
-				nullable: false as const, optional: false as const
+			carefulBot: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			notesCount: {
-				type: 'number' as const,
-				nullable: false as const, optional: false as const
+			injectFeaturedNote: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			avatarId: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
+			receiveAnnouncementEmail: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			bannerId: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
-			},
-			tags: {
-				type: 'array' as const,
-				nullable: false as const, optional: false as const,
+			mutedWords: {
+				type: 'array',
+				optional: false, nullable: false,
 				items: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const
-				}
+					anyOf: [
+						{
+							type: 'string',
+						},
+						{
+							type: 'array',
+							items: {
+								type: 'string',
+							},
+						},
+					],
+				},
 			},
-			avatarUrl: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const,
-				format: 'url'
+			mutedInstances: {
+				type: 'array',
+				optional: false, nullable: false,
+				items: {
+					type: 'string',
+				},
 			},
-			bannerUrl: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const,
-				format: 'url'
-			},
-			avatarBlurhash: {
-				type: 'any' as const,
-				nullable: true as const, optional: false as const,
-				default: null
-			},
-			bannerBlurhash: {
-				type: 'any' as const,
-				nullable: true as const, optional: false as const,
-				default: null
-			},
-			isSuspended: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
-			},
-			isSilenced: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
-			},
-			isLocked: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const,
-			},
-			isBot: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
-			},
-			isCat: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
-			},
-			isAdmin: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
+			notificationRecieveConfig: {
+				type: 'object',
+				optional: false, nullable: false,
+				properties: {
+					note: { optional: true, ...notificationRecieveConfig },
+					follow: { optional: true, ...notificationRecieveConfig },
+					mention: { optional: true, ...notificationRecieveConfig },
+					reply: { optional: true, ...notificationRecieveConfig },
+					renote: { optional: true, ...notificationRecieveConfig },
+					quote: { optional: true, ...notificationRecieveConfig },
+					reaction: { optional: true, ...notificationRecieveConfig },
+					pollEnded: { optional: true, ...notificationRecieveConfig },
+					receiveFollowRequest: { optional: true, ...notificationRecieveConfig },
+					followRequestAccepted: { optional: true, ...notificationRecieveConfig },
+					roleAssigned: { optional: true, ...notificationRecieveConfig },
+					achievementEarned: { optional: true, ...notificationRecieveConfig },
+					app: { optional: true, ...notificationRecieveConfig },
+					test: { optional: true, ...notificationRecieveConfig },
+				},
 			},
 			isModerator: {
-				type: 'boolean' as const,
-				nullable: false as const, optional: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			emojis: {
-				type: 'array' as const,
-				nullable: false as const, optional: false as const,
+			isSilenced: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			isSuspended: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			isHibernated: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			lastActiveDate: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			moderationNote: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			signins: {
+				type: 'array',
+				optional: false, nullable: false,
 				items: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const
-				}
+					ref: 'Signin',
+				},
 			},
-			host: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
+			policies: {
+				type: 'object',
+				optional: false, nullable: false,
+				ref: 'RolePolicies',
 			},
-			inbox: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
+			roles: {
+				type: 'array',
+				optional: false, nullable: false,
+				items: {
+					type: 'object',
+					ref: 'Role',
+				},
 			},
-			sharedInbox: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
+			roleAssigns: {
+				type: 'array',
+				optional: false, nullable: false,
+				items: {
+					type: 'object',
+					properties: {
+						createdAt: {
+							type: 'string',
+							optional: false, nullable: false,
+						},
+						expiresAt: {
+							type: 'string',
+							optional: false, nullable: true,
+						},
+						roleId: {
+							type: 'string',
+							optional: false, nullable: false,
+						},
+					},
+				},
 			},
-			featured: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
-			},
-			uri: {
-				type: 'string' as const,
-				nullable: true as const, optional: false as const
-			},
-			token: {
-				type: 'string' as const,
-				nullable: false as const, optional: false as const,
-				default: '<MASKED>'
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		userId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['userId'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
+
+		@Inject(DI.userProfilesRepository)
+		private userProfilesRepository: UserProfilesRepository,
+
+		@Inject(DI.signinsRepository)
+		private signinsRepository: SigninsRepository,
+
+		private roleService: RoleService,
+		private roleEntityService: RoleEntityService,
+		private idService: IdService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const [user, profile] = await Promise.all([
+				this.usersRepository.findOneBy({ id: ps.userId }),
+				this.userProfilesRepository.findOneBy({ userId: ps.userId }),
+			]);
+
+			if (user == null || profile == null) {
+				throw new Error('user not found');
 			}
-		}
+
+			const isModerator = await this.roleService.isModerator(user);
+			const isSilenced = !(await this.roleService.getUserPolicies(user.id)).canPublicNote;
+
+			const _me = await this.usersRepository.findOneByOrFail({ id: me.id });
+			if (!await this.roleService.isAdministrator(_me) && await this.roleService.isAdministrator(user)) {
+				throw new Error('cannot show info of admin');
+			}
+
+			const signins = await this.signinsRepository.findBy({ userId: user.id });
+
+			const roleAssigns = await this.roleService.getUserAssigns(user.id);
+			const roles = await this.roleService.getUserRoles(user.id);
+
+			return {
+				email: profile.email,
+				emailVerified: profile.emailVerified,
+				autoAcceptFollowed: profile.autoAcceptFollowed,
+				noCrawle: profile.noCrawle,
+				preventAiLearning: profile.preventAiLearning,
+				alwaysMarkNsfw: profile.alwaysMarkNsfw,
+				autoSensitive: profile.autoSensitive,
+				carefulBot: profile.carefulBot,
+				injectFeaturedNote: profile.injectFeaturedNote,
+				receiveAnnouncementEmail: profile.receiveAnnouncementEmail,
+				mutedWords: profile.mutedWords,
+				mutedInstances: profile.mutedInstances,
+				notificationRecieveConfig: profile.notificationRecieveConfig,
+				isModerator: isModerator,
+				isSilenced: isSilenced,
+				isSuspended: user.isSuspended,
+				isHibernated: user.isHibernated,
+				lastActiveDate: user.lastActiveDate ? user.lastActiveDate.toISOString() : null,
+				moderationNote: profile.moderationNote ?? '',
+				signins,
+				policies: await this.roleService.getUserPolicies(user.id),
+				roles: await this.roleEntityService.packMany(roles, me),
+				roleAssigns: roleAssigns.map(a => ({
+					createdAt: this.idService.parse(a.id).date.toISOString(),
+					expiresAt: a.expiresAt ? a.expiresAt.toISOString() : null,
+					roleId: a.roleId,
+				})),
+			};
+		});
 	}
-};
-
-export default define(meta, async (ps, me) => {
-	const user = await Users.findOne(ps.userId as string);
-
-	if (user == null) {
-		throw new Error('user not found');
-	}
-
-	if ((me.isModerator && !me.isAdmin) && user.isAdmin) {
-		throw new Error('cannot show info of admin');
-	}
-
-	return {
-		...user,
-		token: user.token != null ? '<MASKED>' : user.token,
-	};
-});
+}

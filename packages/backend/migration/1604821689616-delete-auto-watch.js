@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class deleteAutoWatch1604821689616 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class deleteAutoWatch1604821689616 {
     constructor() {
         this.name = 'deleteAutoWatch1604821689616';
     }
@@ -11,4 +14,3 @@ class deleteAutoWatch1604821689616 {
         await queryRunner.query(`ALTER TABLE "user_profile" ADD "autoWatch" boolean NOT NULL DEFAULT false`);
     }
 }
-exports.deleteAutoWatch1604821689616 = deleteAutoWatch1604821689616;

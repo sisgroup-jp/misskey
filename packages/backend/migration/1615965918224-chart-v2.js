@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class chartV21615965918224 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class chartV21615965918224 {
     constructor() {
         this.name = 'chartV21615965918224';
     }
@@ -214,4 +217,3 @@ class chartV21615965918224 {
         await queryRunner.query(`CREATE INDEX "IDX_15e91a03aeeac9dbccdf43fc06" ON "__chart__active_users" ("span") `);
     }
 }
-exports.chartV21615965918224 = chartV21615965918224;

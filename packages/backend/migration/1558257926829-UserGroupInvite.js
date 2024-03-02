@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class UserGroupInvite1558257926829 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class UserGroupInvite1558257926829 {
     async up(queryRunner) {
         await queryRunner.query(`CREATE TABLE "user_group_invite" ("id" character varying(32) NOT NULL, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL, "userId" character varying(32) NOT NULL, "userGroupId" character varying(32) NOT NULL, CONSTRAINT "PK_3893884af0d3a5f4d01e7921a97" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_1039988afa3bf991185b277fe0" ON "user_group_invite" ("userId") `);
@@ -20,4 +23,3 @@ class UserGroupInvite1558257926829 {
         await queryRunner.query(`DROP TABLE "user_group_invite"`);
     }
 }
-exports.UserGroupInvite1558257926829 = UserGroupInvite1558257926829;

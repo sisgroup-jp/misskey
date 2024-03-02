@@ -1,74 +1,97 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { ModerationLogs } from '@/models/index';
-import { makePaginationQuery } from '../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { ModerationLogsRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { DI } from '@/di-symbols.js';
+import { ModerationLogEntityService } from '@/core/entities/ModerationLogEntityService.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
-	requireModerator: true,
-
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-	},
+	requireCredential: true,
+	requireAdmin: true,
+	kind: 'read:admin:show-moderation-log',
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			properties: {
 				id: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'id'
+					type: 'string',
+					optional: false, nullable: false,
+					format: 'id',
 				},
 				createdAt: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'date-time'
+					type: 'string',
+					optional: false, nullable: false,
+					format: 'date-time',
 				},
 				type: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const
+					type: 'string',
+					optional: false, nullable: false,
 				},
 				info: {
-					type: 'object' as const,
-					optional: false as const, nullable: false as const
+					type: 'object',
+					optional: false, nullable: false,
 				},
 				userId: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'id'
+					type: 'string',
+					optional: false, nullable: false,
+					format: 'id',
 				},
 				user: {
-					type: 'object' as const,
-					optional: false as const, nullable: false as const,
-					ref: 'User'
-				}
+					type: 'object',
+					optional: false, nullable: false,
+					ref: 'UserDetailedNotMe',
+				},
+			},
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		type: { type: 'string', nullable: true },
+		userId: { type: 'string', format: 'misskey:id', nullable: true },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.moderationLogsRepository)
+		private moderationLogsRepository: ModerationLogsRepository,
+
+		private moderationLogEntityService: ModerationLogEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.moderationLogsRepository.createQueryBuilder('report'), ps.sinceId, ps.untilId);
+
+			if (ps.type != null) {
+				query.andWhere('report.type = :type', { type: ps.type });
 			}
-		}
+
+			if (ps.userId != null) {
+				query.andWhere('report.userId = :userId', { userId: ps.userId });
+			}
+
+			const reports = await query.limit(ps.limit).getMany();
+
+			return await this.moderationLogEntityService.packMany(reports);
+		});
 	}
-};
-
-export default define(meta, async (ps) => {
-	const query = makePaginationQuery(ModerationLogs.createQueryBuilder('report'), ps.sinceId, ps.untilId);
-
-	const reports = await query.take(ps.limit!).getMany();
-
-	return await ModerationLogs.packMany(reports);
-});
+}

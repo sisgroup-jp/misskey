@@ -1,30 +1,45 @@
-import define from '../define';
-import endpoints from '../endpoints';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import endpoints from '../endpoints.js';
 
 export const meta = {
-	requireCredential: false as const,
+	requireCredential: false,
 
 	tags: ['meta'],
 
-	params: {
-	},
-
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'string' as const,
-			optional: false as const, nullable: false as const
+			type: 'string',
+			optional: false, nullable: false,
 		},
 		example: [
 			'admin/abuse-user-reports',
 			'admin/accounts/create',
 			'admin/announcements/create',
-			'...'
-		]
-	}
-};
+			'...',
+		],
+	},
+} as const;
 
-export default define(meta, async () => {
-	return endpoints.map(x => x.name);
-});
+export const paramDef = {
+	type: 'object',
+	properties: {},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+	) {
+		super(meta, paramDef, async () => {
+			return endpoints.map(x => x.name);
+		});
+	}
+}

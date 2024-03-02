@@ -1,60 +1,38 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { ApiError } from '../../error';
-import { genId } from '@/misc/gen-id';
-import { AnnouncementReads, Announcements, Users } from '@/models/index';
-import { publishMainStream } from '@/services/stream';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { AnnouncementService } from '@/core/AnnouncementService.js';
 
 export const meta = {
 	tags: ['account'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'write:account',
 
-	params: {
-		announcementId: {
-			validator: $.type(ID),
-		},
-	},
-
 	errors: {
-		noSuchAnnouncement: {
-			message: 'No such announcement.',
-			code: 'NO_SUCH_ANNOUNCEMENT',
-			id: '184663db-df88-4bc2-8b52-fb85f0681939'
-		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		announcementId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['announcementId'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private announcementService: AnnouncementService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			await this.announcementService.read(me, ps.announcementId);
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	// Check if announcement exists
-	const announcement = await Announcements.findOne(ps.announcementId);
-
-	if (announcement == null) {
-		throw new ApiError(meta.errors.noSuchAnnouncement);
-	}
-
-	// Check if already read
-	const read = await AnnouncementReads.findOne({
-		announcementId: ps.announcementId,
-		userId: user.id
-	});
-
-	if (read != null) {
-		return;
-	}
-
-	// Create read
-	await AnnouncementReads.insert({
-		id: genId(),
-		createdAt: new Date(),
-		announcementId: ps.announcementId,
-		userId: user.id,
-	});
-
-	if (!await Users.getHasUnreadAnnouncement(user.id)) {
-		publishMainStream(user.id, 'readAllAnnouncements');
-	}
-});
+}

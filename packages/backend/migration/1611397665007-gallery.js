@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class gallery1611397665007 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class gallery1611397665007 {
     constructor() {
         this.name = 'gallery1611397665007';
     }
@@ -37,4 +40,3 @@ class gallery1611397665007 {
         await queryRunner.query(`DROP TABLE "gallery_post"`);
     }
 }
-exports.gallery1611397665007 = gallery1611397665007;

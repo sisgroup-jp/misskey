@@ -1,72 +1,83 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { makePaginationQuery } from '../../common/make-pagination-query';
-import { generateVisibilityQuery } from '../../common/generate-visibility-query';
-import { generateMutedUserQuery } from '../../common/generate-muted-user-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 import { Brackets } from 'typeorm';
-import { Notes } from '@/models/index';
-import { generateBlockedUserQuery } from '../../common/generate-block-query';
+import { Inject, Injectable } from '@nestjs/common';
+import type { NotesRepository } from '@/models/_.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { QueryService } from '@/core/QueryService.js';
+import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['notes'],
 
-	requireCredential: false as const,
-
-	params: {
-		noteId: {
-			validator: $.type(ID),
-		},
-
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'Note',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, user) => {
-	const query = makePaginationQuery(Notes.createQueryBuilder('note'), ps.sinceId, ps.untilId)
-		.andWhere(new Brackets(qb => { qb
-			.where(`note.replyId = :noteId`, { noteId: ps.noteId })
-			.orWhere(new Brackets(qb => { qb
-				.where(`note.renoteId = :noteId`, { noteId: ps.noteId })
-				.andWhere(new Brackets(qb => { qb
-					.where(`note.text IS NOT NULL`)
-					.orWhere(`note.fileIds != '{}'`)
-					.orWhere(`note.hasPoll = TRUE`);
-				}));
-			}));
-		}))
-		.innerJoinAndSelect('note.user', 'user')
-		.leftJoinAndSelect('note.reply', 'reply')
-		.leftJoinAndSelect('note.renote', 'renote')
-		.leftJoinAndSelect('reply.user', 'replyUser')
-		.leftJoinAndSelect('renote.user', 'renoteUser');
+export const paramDef = {
+	type: 'object',
+	properties: {
+		noteId: { type: 'string', format: 'misskey:id' },
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['noteId'],
+} as const;
 
-	generateVisibilityQuery(query, user);
-	if (user) generateMutedUserQuery(query, user);
-	if (user) generateBlockedUserQuery(query, user);
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.notesRepository)
+		private notesRepository: NotesRepository,
 
-	const notes = await query.take(ps.limit!).getMany();
+		private noteEntityService: NoteEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
+				.andWhere(new Brackets(qb => {
+					qb
+						.where('note.replyId = :noteId', { noteId: ps.noteId })
+						.orWhere(new Brackets(qb => {
+							qb
+								.where('note.renoteId = :noteId', { noteId: ps.noteId })
+								.andWhere(new Brackets(qb => {
+									qb
+										.where('note.text IS NOT NULL')
+										.orWhere('note.fileIds != \'{}\'')
+										.orWhere('note.hasPoll = TRUE');
+								}));
+						}));
+				}))
+				.innerJoinAndSelect('note.user', 'user')
+				.leftJoinAndSelect('note.reply', 'reply')
+				.leftJoinAndSelect('note.renote', 'renote')
+				.leftJoinAndSelect('reply.user', 'replyUser')
+				.leftJoinAndSelect('renote.user', 'renoteUser');
 
-	return await Notes.packMany(notes, user);
-});
+			this.queryService.generateVisibilityQuery(query, me);
+			if (me) {
+				this.queryService.generateMutedUserQuery(query, me);
+				this.queryService.generateBlockedUserQuery(query, me);
+			}
+
+			const notes = await query.limit(ps.limit).getMany();
+
+			return await this.noteEntityService.packMany(notes, me);
+		});
+	}
+}

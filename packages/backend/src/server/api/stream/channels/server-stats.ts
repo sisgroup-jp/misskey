@@ -1,25 +1,37 @@
-import autobind from 'autobind-decorator';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 import Xev from 'xev';
-import Channel from '../channel';
+import { Injectable } from '@nestjs/common';
+import { bindThis } from '@/decorators.js';
+import Channel, { type MiChannelService } from '../channel.js';
 
 const ev = new Xev();
 
-export default class extends Channel {
+class ServerStatsChannel extends Channel {
 	public readonly chName = 'serverStats';
 	public static shouldShare = true;
-	public static requireCredential = false;
+	public static requireCredential = false as const;
 
-	@autobind
+	constructor(id: string, connection: Channel['connection']) {
+		super(id, connection);
+		//this.onStats = this.onStats.bind(this);
+		//this.onMessage = this.onMessage.bind(this);
+	}
+
+	@bindThis
 	public async init(params: any) {
 		ev.addListener('serverStats', this.onStats);
 	}
 
-	@autobind
+	@bindThis
 	private onStats(stats: any) {
 		this.send('stats', stats);
 	}
 
-	@autobind
+	@bindThis
 	public onMessage(type: string, body: any) {
 		switch (type) {
 			case 'requestLog':
@@ -28,14 +40,33 @@ export default class extends Channel {
 				});
 				ev.emit('requestServerStatsLog', {
 					id: body.id,
-					length: body.length
+					length: body.length,
 				});
 				break;
 		}
 	}
 
-	@autobind
+	@bindThis
 	public dispose() {
 		ev.removeListener('serverStats', this.onStats);
+	}
+}
+
+@Injectable()
+export class ServerStatsChannelService implements MiChannelService<false> {
+	public readonly shouldShare = ServerStatsChannel.shouldShare;
+	public readonly requireCredential = ServerStatsChannel.requireCredential;
+	public readonly kind = ServerStatsChannel.kind;
+
+	constructor(
+	) {
+	}
+
+	@bindThis
+	public create(id: string, connection: Channel['connection']): ServerStatsChannel {
+		return new ServerStatsChannel(
+			id,
+			connection,
+		);
 	}
 }

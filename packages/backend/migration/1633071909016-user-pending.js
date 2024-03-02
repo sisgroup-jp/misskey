@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class userPending1633071909016 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class userPending1633071909016 {
     constructor() {
         this.name = 'userPending1633071909016';
     }
@@ -13,4 +16,3 @@ class userPending1633071909016 {
         await queryRunner.query(`DROP TABLE "user_pending"`);
     }
 }
-exports.userPending1633071909016 = userPending1633071909016;

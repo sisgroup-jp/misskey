@@ -1,127 +1,137 @@
-import $ from 'cafy';
-import define from '../../define';
-import { genId } from '@/misc/gen-id';
-import { Antennas, UserLists, UserGroupJoinings } from '@/models/index';
-import { ID } from '@/misc/cafy-id';
-import { ApiError } from '../../error';
-import { publishInternalEvent } from '@/services/stream';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { IdService } from '@/core/IdService.js';
+import type { UserListsRepository, AntennasRepository } from '@/models/_.js';
+import { GlobalEventService } from '@/core/GlobalEventService.js';
+import { AntennaEntityService } from '@/core/entities/AntennaEntityService.js';
+import { DI } from '@/di-symbols.js';
+import { RoleService } from '@/core/RoleService.js';
+import { ApiError } from '../../error.js';
 
 export const meta = {
 	tags: ['antennas'],
 
-	requireCredential: true as const,
+	requireCredential: true,
+
+	prohibitMoved: true,
 
 	kind: 'write:account',
-
-	params: {
-		name: {
-			validator: $.str.range(1, 100)
-		},
-
-		src: {
-			validator: $.str.or(['home', 'all', 'users', 'list', 'group'])
-		},
-
-		userListId: {
-			validator: $.nullable.optional.type(ID),
-		},
-
-		userGroupId: {
-			validator: $.nullable.optional.type(ID),
-		},
-
-		keywords: {
-			validator: $.arr($.arr($.str))
-		},
-
-		excludeKeywords: {
-			validator: $.arr($.arr($.str))
-		},
-
-		users: {
-			validator: $.arr($.str)
-		},
-
-		caseSensitive: {
-			validator: $.bool
-		},
-
-		withReplies: {
-			validator: $.bool
-		},
-
-		withFile: {
-			validator: $.bool
-		},
-
-		notify: {
-			validator: $.bool
-		}
-	},
 
 	errors: {
 		noSuchUserList: {
 			message: 'No such user list.',
 			code: 'NO_SUCH_USER_LIST',
-			id: '95063e93-a283-4b8b-9aa5-bcdb8df69a7f'
+			id: '95063e93-a283-4b8b-9aa5-bcdb8df69a7f',
 		},
 
-		noSuchUserGroup: {
-			message: 'No such user group.',
-			code: 'NO_SUCH_USER_GROUP',
-			id: 'aa3c0b9a-8cae-47c0-92ac-202ce5906682'
-		}
+		tooManyAntennas: {
+			message: 'You cannot create antenna any more.',
+			code: 'TOO_MANY_ANTENNAS',
+			id: 'faf47050-e8b5-438c-913c-db2b1576fde4',
+		},
 	},
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
-		ref: 'Antenna'
-	}
-};
+		type: 'object',
+		optional: false, nullable: false,
+		ref: 'Antenna',
+	},
+} as const;
 
-export default define(meta, async (ps, user) => {
-	let userList;
-	let userGroupJoining;
+export const paramDef = {
+	type: 'object',
+	properties: {
+		name: { type: 'string', minLength: 1, maxLength: 100 },
+		src: { type: 'string', enum: ['home', 'all', 'users', 'list', 'users_blacklist'] },
+		userListId: { type: 'string', format: 'misskey:id', nullable: true },
+		keywords: { type: 'array', items: {
+			type: 'array', items: {
+				type: 'string',
+			},
+		} },
+		excludeKeywords: { type: 'array', items: {
+			type: 'array', items: {
+				type: 'string',
+			},
+		} },
+		users: { type: 'array', items: {
+			type: 'string',
+		} },
+		caseSensitive: { type: 'boolean' },
+		localOnly: { type: 'boolean' },
+		withReplies: { type: 'boolean' },
+		withFile: { type: 'boolean' },
+		notify: { type: 'boolean' },
+	},
+	required: ['name', 'src', 'keywords', 'excludeKeywords', 'users', 'caseSensitive', 'withReplies', 'withFile', 'notify'],
+} as const;
 
-	if (ps.src === 'list' && ps.userListId) {
-		userList = await UserLists.findOne({
-			id: ps.userListId,
-			userId: user.id,
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.antennasRepository)
+		private antennasRepository: AntennasRepository,
+
+		@Inject(DI.userListsRepository)
+		private userListsRepository: UserListsRepository,
+
+		private antennaEntityService: AntennaEntityService,
+		private roleService: RoleService,
+		private idService: IdService,
+		private globalEventService: GlobalEventService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			if (ps.keywords.flat().every(x => x === '') && ps.excludeKeywords.flat().every(x => x === '')) {
+				throw new Error('either keywords or excludeKeywords is required.');
+			}
+
+			const currentAntennasCount = await this.antennasRepository.countBy({
+				userId: me.id,
+			});
+			if (currentAntennasCount > (await this.roleService.getUserPolicies(me.id)).antennaLimit) {
+				throw new ApiError(meta.errors.tooManyAntennas);
+			}
+
+			let userList;
+
+			if (ps.src === 'list' && ps.userListId) {
+				userList = await this.userListsRepository.findOneBy({
+					id: ps.userListId,
+					userId: me.id,
+				});
+
+				if (userList == null) {
+					throw new ApiError(meta.errors.noSuchUserList);
+				}
+			}
+
+			const now = new Date();
+
+			const antenna = await this.antennasRepository.insert({
+				id: this.idService.gen(now.getTime()),
+				lastUsedAt: now,
+				userId: me.id,
+				name: ps.name,
+				src: ps.src,
+				userListId: userList ? userList.id : null,
+				keywords: ps.keywords,
+				excludeKeywords: ps.excludeKeywords,
+				users: ps.users,
+				caseSensitive: ps.caseSensitive,
+				localOnly: ps.localOnly,
+				withReplies: ps.withReplies,
+				withFile: ps.withFile,
+				notify: ps.notify,
+			}).then(x => this.antennasRepository.findOneByOrFail(x.identifiers[0]));
+
+			this.globalEventService.publishInternalEvent('antennaCreated', antenna);
+
+			return await this.antennaEntityService.pack(antenna);
 		});
-
-		if (userList == null) {
-			throw new ApiError(meta.errors.noSuchUserList);
-		}
-	} else if (ps.src === 'group' && ps.userGroupId) {
-		userGroupJoining = await UserGroupJoinings.findOne({
-			userGroupId: ps.userGroupId,
-			userId: user.id,
-		});
-
-		if (userGroupJoining == null) {
-			throw new ApiError(meta.errors.noSuchUserGroup);
-		}
 	}
-
-	const antenna = await Antennas.insert({
-		id: genId(),
-		createdAt: new Date(),
-		userId: user.id,
-		name: ps.name,
-		src: ps.src,
-		userListId: userList ? userList.id : null,
-		userGroupJoiningId: userGroupJoining ? userGroupJoining.id : null,
-		keywords: ps.keywords,
-		excludeKeywords: ps.excludeKeywords,
-		users: ps.users,
-		caseSensitive: ps.caseSensitive,
-		withReplies: ps.withReplies,
-		withFile: ps.withFile,
-		notify: ps.notify,
-	}).then(x => Antennas.findOneOrFail(x.identifiers[0]));
-
-	publishInternalEvent('antennaCreated', antenna);
-
-	return await Antennas.pack(antenna);
-});
+}

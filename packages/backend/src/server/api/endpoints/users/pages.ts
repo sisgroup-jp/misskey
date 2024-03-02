@@ -1,40 +1,61 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { Pages } from '@/models/index';
-import { makePaginationQuery } from '../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { QueryService } from '@/core/QueryService.js';
+import { PageEntityService } from '@/core/entities/PageEntityService.js';
+import type { PagesRepository } from '@/models/_.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['users', 'pages'],
 
-	params: {
-		userId: {
-			validator: $.type(ID),
-		},
+	description: 'Show all pages this user created.',
 
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
+	res: {
+		type: 'array',
+		optional: false, nullable: false,
+		items: {
+			type: 'object',
+			optional: false, nullable: false,
+			ref: 'Page',
 		},
+	},
+} as const;
 
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
+export const paramDef = {
+	type: 'object',
+	properties: {
+		userId: { type: 'string', format: 'misskey:id' },
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['userId'],
+} as const;
 
-		untilId: {
-			validator: $.optional.type(ID),
-		},
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.pagesRepository)
+		private pagesRepository: PagesRepository,
+
+		private pageEntityService: PageEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.pagesRepository.createQueryBuilder('page'), ps.sinceId, ps.untilId)
+				.andWhere('page.userId = :userId', { userId: ps.userId })
+				.andWhere('page.visibility = \'public\'');
+
+			const pages = await query
+				.limit(ps.limit)
+				.getMany();
+
+			return await this.pageEntityService.packMany(pages);
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	const query = makePaginationQuery(Pages.createQueryBuilder('page'), ps.sinceId, ps.untilId)
-		.andWhere(`page.userId = :userId`, { userId: ps.userId })
-		.andWhere('page.visibility = \'public\'');
-
-	const pages = await query
-		.take(ps.limit!)
-		.getMany();
-
-	return await Pages.packMany(pages);
-});
+}

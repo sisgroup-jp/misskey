@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class instanceIconUrl1595676934834 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class instanceIconUrl1595676934834 {
     constructor() {
         this.name = 'instanceIconUrl1595676934834';
     }
@@ -11,4 +14,3 @@ class instanceIconUrl1595676934834 {
         await queryRunner.query(`ALTER TABLE "instance" DROP COLUMN "iconUrl"`);
     }
 }
-exports.instanceIconUrl1595676934834 = instanceIconUrl1595676934834;

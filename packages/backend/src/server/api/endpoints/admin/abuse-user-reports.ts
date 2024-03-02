@@ -1,134 +1,128 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { AbuseUserReports } from '@/models/index';
-import { makePaginationQuery } from '../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { AbuseUserReportsRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { DI } from '@/di-symbols.js';
+import { AbuseUserReportEntityService } from '@/core/entities/AbuseUserReportEntityService.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 	requireModerator: true,
-
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-
-		state: {
-			validator: $.optional.nullable.str,
-			default: null,
-		},
-
-		reporterOrigin: {
-			validator: $.optional.str.or([
-				'combined',
-				'local',
-				'remote',
-			]),
-			default: 'combined'
-		},
-
-		targetUserOrigin: {
-			validator: $.optional.str.or([
-				'combined',
-				'local',
-				'remote',
-			]),
-			default: 'combined'
-		},
-	},
+	kind: 'read:admin:abuse-user-reports',
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			properties: {
 				id: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const,
+					type: 'string',
+					nullable: false, optional: false,
 					format: 'id',
 					example: 'xxxxxxxxxx',
 				},
 				createdAt: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const,
+					type: 'string',
+					nullable: false, optional: false,
 					format: 'date-time',
 				},
 				comment: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const,
+					type: 'string',
+					nullable: false, optional: false,
 				},
 				resolved: {
-					type: 'boolean' as const,
-					nullable: false as const, optional: false as const,
-					example: false
+					type: 'boolean',
+					nullable: false, optional: false,
+					example: false,
 				},
 				reporterId: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const,
+					type: 'string',
+					nullable: false, optional: false,
 					format: 'id',
 				},
 				targetUserId: {
-					type: 'string' as const,
-					nullable: false as const, optional: false as const,
+					type: 'string',
+					nullable: false, optional: false,
 					format: 'id',
 				},
 				assigneeId: {
-					type: 'string' as const,
-					nullable: true as const, optional: false as const,
+					type: 'string',
+					nullable: true, optional: false,
 					format: 'id',
 				},
 				reporter: {
-					type: 'object' as const,
-					nullable: false as const, optional: false as const,
-					ref: 'User'
+					type: 'object',
+					nullable: false, optional: false,
+					ref: 'UserDetailedNotMe',
 				},
 				targetUser: {
-					type: 'object' as const,
-					nullable: false as const, optional: false as const,
-					ref: 'User'
+					type: 'object',
+					nullable: false, optional: false,
+					ref: 'UserDetailedNotMe',
 				},
 				assignee: {
-					type: 'object' as const,
-					nullable: true as const, optional: true as const,
-					ref: 'User'
-				}
+					type: 'object',
+					nullable: true, optional: true,
+					ref: 'UserDetailedNotMe',
+				},
+			},
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		state: { type: 'string', nullable: true, default: null },
+		reporterOrigin: { type: 'string', enum: ['combined', 'local', 'remote'], default: 'combined' },
+		targetUserOrigin: { type: 'string', enum: ['combined', 'local', 'remote'], default: 'combined' },
+		forwarded: { type: 'boolean', default: false },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.abuseUserReportsRepository)
+		private abuseUserReportsRepository: AbuseUserReportsRepository,
+
+		private abuseUserReportEntityService: AbuseUserReportEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.abuseUserReportsRepository.createQueryBuilder('report'), ps.sinceId, ps.untilId);
+
+			switch (ps.state) {
+				case 'resolved': query.andWhere('report.resolved = TRUE'); break;
+				case 'unresolved': query.andWhere('report.resolved = FALSE'); break;
 			}
-		}
+
+			switch (ps.reporterOrigin) {
+				case 'local': query.andWhere('report.reporterHost IS NULL'); break;
+				case 'remote': query.andWhere('report.reporterHost IS NOT NULL'); break;
+			}
+
+			switch (ps.targetUserOrigin) {
+				case 'local': query.andWhere('report.targetUserHost IS NULL'); break;
+				case 'remote': query.andWhere('report.targetUserHost IS NOT NULL'); break;
+			}
+
+			const reports = await query.limit(ps.limit).getMany();
+
+			return await this.abuseUserReportEntityService.packMany(reports);
+		});
 	}
-};
-
-export default define(meta, async (ps) => {
-	const query = makePaginationQuery(AbuseUserReports.createQueryBuilder('report'), ps.sinceId, ps.untilId);
-
-	switch (ps.state) {
-		case 'resolved': query.andWhere('report.resolved = TRUE'); break;
-		case 'unresolved': query.andWhere('report.resolved = FALSE'); break;
-	}
-
-	switch (ps.reporterOrigin) {
-		case 'local': query.andWhere('report.reporterHost IS NULL'); break;
-		case 'remote': query.andWhere('report.reporterHost IS NOT NULL'); break;
-	}
-
-	switch (ps.targetUserOrigin) {
-		case 'local': query.andWhere('report.targetUserHost IS NULL'); break;
-		case 'remote': query.andWhere('report.targetUserHost IS NOT NULL'); break;
-	}
-
-	const reports = await query.take(ps.limit!).getMany();
-
-	return await AbuseUserReports.packMany(reports);
-});
+}

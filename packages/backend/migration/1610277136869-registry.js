@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class registry1610277136869 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class registry1610277136869 {
     constructor() {
         this.name = 'registry1610277136869';
     }
@@ -19,4 +22,3 @@ class registry1610277136869 {
         await queryRunner.query(`DROP TABLE "registry_item"`);
     }
 }
-exports.registry1610277136869 = registry1610277136869;

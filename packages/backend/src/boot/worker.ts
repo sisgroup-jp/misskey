@@ -1,17 +1,23 @@
-import * as cluster from 'cluster';
-import { initDb } from '../db/postgre';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import cluster from 'node:cluster';
+import { envOption } from '@/env.js';
+import { jobQueue, server } from './common.js';
 
 /**
  * Init worker process
  */
 export async function workerMain() {
-	await initDb();
-
-	// start server
-	await require('../server').default();
-
-	// start job queue
-	require('../queue').default();
+	if (envOption.onlyServer) {
+		await server();
+	} else if (envOption.onlyQueue) {
+		await jobQueue();
+	} else {
+		await jobQueue();
+	}
 
 	if (cluster.isWorker) {
 		// Send a 'ready' message to parent process

@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class v1251579977526288 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class v1251579977526288 {
     constructor() {
         this.name = 'v1251579977526288';
     }
@@ -51,4 +54,3 @@ class v1251579977526288 {
         await queryRunner.query(`DROP TABLE "clip"`, undefined);
     }
 }
-exports.v1251579977526288 = v1251579977526288;

@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class PageTitleHideOption1562448332510 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class PageTitleHideOption1562448332510 {
     async up(queryRunner) {
         await queryRunner.query(`ALTER TABLE "page" ADD "hideTitleWhenPinned" boolean NOT NULL DEFAULT false`);
     }
@@ -8,4 +11,3 @@ class PageTitleHideOption1562448332510 {
         await queryRunner.query(`ALTER TABLE "page" DROP COLUMN "hideTitleWhenPinned"`);
     }
 }
-exports.PageTitleHideOption1562448332510 = PageTitleHideOption1562448332510;

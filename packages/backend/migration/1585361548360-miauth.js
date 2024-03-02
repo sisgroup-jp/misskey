@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class miauth1585361548360 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class miauth1585361548360 {
     constructor() {
         this.name = 'miauth1585361548360';
     }
@@ -33,4 +36,3 @@ class miauth1585361548360 {
         await queryRunner.query(`ALTER TABLE "access_token" DROP COLUMN "lastUsedAt"`, undefined);
     }
 }
-exports.miauth1585361548360 = miauth1585361548360;

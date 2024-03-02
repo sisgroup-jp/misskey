@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class PasswordLessLogin1562422242907 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class PasswordLessLogin1562422242907 {
     async up(queryRunner) {
         await queryRunner.query(`ALTER TABLE "user_profile" ADD COLUMN "usePasswordLessLogin" boolean DEFAULT false NOT NULL`);
     }
@@ -8,4 +11,3 @@ class PasswordLessLogin1562422242907 {
         await queryRunner.query(`ALTER TABLE "user_profile" DROP COLUMN "usePasswordLessLogin"`);
     }
 }
-exports.PasswordLessLogin1562422242907 = PasswordLessLogin1562422242907;

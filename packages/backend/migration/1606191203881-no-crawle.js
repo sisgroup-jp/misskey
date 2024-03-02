@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class noCrawle1606191203881 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class noCrawle1606191203881 {
     constructor() {
         this.name = 'noCrawle1606191203881';
     }
@@ -13,4 +16,3 @@ class noCrawle1606191203881 {
         await queryRunner.query(`ALTER TABLE "user_profile" DROP COLUMN "noCrawle"`);
     }
 }
-exports.noCrawle1606191203881 = noCrawle1606191203881;

@@ -1,74 +1,115 @@
-import autobind from 'autobind-decorator';
-import { isMutedUserRelated } from '@/misc/is-muted-user-related';
-import Channel from '../channel';
-import { fetchMeta } from '@/misc/fetch-meta';
-import { Notes } from '@/models/index';
-import { checkWordMute } from '@/misc/check-word-mute';
-import { isBlockerUserRelated } from '@/misc/is-blocker-user-related';
-import { Packed } from '@/misc/schema';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 
-export default class extends Channel {
+import { Injectable } from '@nestjs/common';
+import { checkWordMute } from '@/misc/check-word-mute.js';
+import { isUserRelated } from '@/misc/is-user-related.js';
+import type { Packed } from '@/misc/json-schema.js';
+import { MetaService } from '@/core/MetaService.js';
+import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
+import { bindThis } from '@/decorators.js';
+import { RoleService } from '@/core/RoleService.js';
+import Channel, { type MiChannelService } from '../channel.js';
+
+class LocalTimelineChannel extends Channel {
 	public readonly chName = 'localTimeline';
-	public static shouldShare = true;
-	public static requireCredential = false;
+	public static shouldShare = false;
+	public static requireCredential = false as const;
+	private withRenotes: boolean;
+	private withReplies: boolean;
+	private withFiles: boolean;
 
-	@autobind
+	constructor(
+		private metaService: MetaService,
+		private roleService: RoleService,
+		private noteEntityService: NoteEntityService,
+
+		id: string,
+		connection: Channel['connection'],
+	) {
+		super(id, connection);
+		//this.onNote = this.onNote.bind(this);
+	}
+
+	@bindThis
 	public async init(params: any) {
-		const meta = await fetchMeta();
-		if (meta.disableLocalTimeline) {
-			if (this.user == null || (!this.user.isAdmin && !this.user.isModerator)) return;
-		}
+		const policies = await this.roleService.getUserPolicies(this.user ? this.user.id : null);
+		if (!policies.ltlAvailable) return;
+
+		this.withRenotes = params.withRenotes ?? true;
+		this.withReplies = params.withReplies ?? false;
+		this.withFiles = params.withFiles ?? false;
 
 		// Subscribe events
 		this.subscriber.on('notesStream', this.onNote);
 	}
 
-	@autobind
+	@bindThis
 	private async onNote(note: Packed<'Note'>) {
+		if (this.withFiles && (note.fileIds == null || note.fileIds.length === 0)) return;
+
 		if (note.user.host !== null) return;
 		if (note.visibility !== 'public') return;
-		if (note.channelId != null && !this.followingChannels.has(note.channelId)) return;
-
-		// リプライなら再pack
-		if (note.replyId != null) {
-			note.reply = await Notes.pack(note.replyId, this.user, {
-				detail: true
-			});
-		}
-		// Renoteなら再pack
-		if (note.renoteId != null) {
-			note.renote = await Notes.pack(note.renoteId, this.user, {
-				detail: true
-			});
-		}
+		if (note.channelId != null) return;
 
 		// 関係ない返信は除外
-		if (note.reply) {
+		if (note.reply && this.user && !this.following[note.userId]?.withReplies && !this.withReplies) {
 			const reply = note.reply;
 			// 「チャンネル接続主への返信」でもなければ、「チャンネル接続主が行った返信」でもなければ、「投稿者の投稿者自身への返信」でもない場合
-			if (reply.userId !== this.user!.id && note.userId !== this.user!.id && reply.userId !== note.userId) return;
+			if (reply.userId !== this.user.id && note.userId !== this.user.id && reply.userId !== note.userId) return;
 		}
 
-		// 流れてきたNoteがミュートしているユーザーが関わるものだったら無視する
-		if (isMutedUserRelated(note, this.muting)) return;
-		// 流れてきたNoteがブロックされているユーザーが関わるものだったら無視する
-		if (isBlockerUserRelated(note, this.blocking)) return;
+		if (note.renote && note.text == null && (note.fileIds == null || note.fileIds.length === 0) && !this.withRenotes) return;
 
-		// 流れてきたNoteがミュートすべきNoteだったら無視する
-		// TODO: 将来的には、単にMutedNoteテーブルにレコードがあるかどうかで判定したい(以下の理由により難しそうではある)
-		// 現状では、ワードミュートにおけるMutedNoteレコードの追加処理はストリーミングに流す処理と並列で行われるため、
-		// レコードが追加されるNoteでも追加されるより先にここのストリーミングの処理に到達することが起こる。
-		// そのためレコードが存在するかのチェックでは不十分なので、改めてcheckWordMuteを呼んでいる
-		if (this.userProfile && await checkWordMute(note, this.user, this.userProfile.mutedWords)) return;
+		// 流れてきたNoteがミュートしているユーザーが関わるものだったら無視する
+		if (isUserRelated(note, this.userIdsWhoMeMuting)) return;
+		// 流れてきたNoteがブロックされているユーザーが関わるものだったら無視する
+		if (isUserRelated(note, this.userIdsWhoBlockingMe)) return;
+
+		if (note.renote && !note.text && isUserRelated(note, this.userIdsWhoMeMutingRenotes)) return;
+
+		if (this.user && note.renoteId && !note.text) {
+			if (note.renote && Object.keys(note.renote.reactions).length > 0) {
+				const myRenoteReaction = await this.noteEntityService.populateMyReaction(note.renote, this.user.id);
+				note.renote.myReaction = myRenoteReaction;
+			}
+		}
 
 		this.connection.cacheNote(note);
 
 		this.send('note', note);
 	}
 
-	@autobind
+	@bindThis
 	public dispose() {
 		// Unsubscribe events
 		this.subscriber.off('notesStream', this.onNote);
+	}
+}
+
+@Injectable()
+export class LocalTimelineChannelService implements MiChannelService<false> {
+	public readonly shouldShare = LocalTimelineChannel.shouldShare;
+	public readonly requireCredential = LocalTimelineChannel.requireCredential;
+	public readonly kind = LocalTimelineChannel.kind;
+
+	constructor(
+		private metaService: MetaService,
+		private roleService: RoleService,
+		private noteEntityService: NoteEntityService,
+	) {
+	}
+
+	@bindThis
+	public create(id: string, connection: Channel['connection']): LocalTimelineChannel {
+		return new LocalTimelineChannel(
+			this.metaService,
+			this.roleService,
+			this.noteEntityService,
+			id,
+			connection,
+		);
 	}
 }

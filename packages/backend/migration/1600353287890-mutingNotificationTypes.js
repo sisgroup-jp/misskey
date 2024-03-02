@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class mutingNotificationTypes1600353287890 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class mutingNotificationTypes1600353287890 {
     constructor() {
         this.name = 'mutingNotificationTypes1600353287890';
     }
@@ -17,4 +20,3 @@ class mutingNotificationTypes1600353287890 {
         await queryRunner.query(`ALTER TABLE "user_profile" ADD "includingNotificationTypes" "user_profile_includingnotificationtypes_enum" array`);
     }
 }
-exports.mutingNotificationTypes1600353287890 = mutingNotificationTypes1600353287890;

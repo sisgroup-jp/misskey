@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class userLastActiveDate1618637372000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class userLastActiveDate1618637372000 {
     constructor() {
         this.name = 'userLastActiveDate1618637372000';
     }
@@ -13,4 +16,3 @@ class userLastActiveDate1618637372000 {
         await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "lastActiveDate"`);
     }
 }
-exports.userLastActiveDate1618637372000 = userLastActiveDate1618637372000;

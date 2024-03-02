@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class isExplorable1607353487793 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class isExplorable1607353487793 {
     constructor() {
         this.name = 'isExplorable1607353487793';
     }
@@ -15,4 +18,3 @@ class isExplorable1607353487793 {
         await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "isExplorable"`);
     }
 }
-exports.isExplorable1607353487793 = isExplorable1607353487793;

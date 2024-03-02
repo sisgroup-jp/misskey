@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class instancePinnedClip1607151207216 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class instancePinnedClip1607151207216 {
     constructor() {
         this.name = 'instancePinnedClip1607151207216';
     }
@@ -11,4 +14,3 @@ class instancePinnedClip1607151207216 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "pinnedClipId"`);
     }
 }
-exports.instancePinnedClip1607151207216 = instancePinnedClip1607151207216;

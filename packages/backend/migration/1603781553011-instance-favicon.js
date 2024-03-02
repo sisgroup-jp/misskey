@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class instanceFavicon1603781553011 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class instanceFavicon1603781553011 {
     constructor() {
         this.name = 'instanceFavicon1603781553011';
     }
@@ -11,4 +14,3 @@ class instanceFavicon1603781553011 {
         await queryRunner.query(`ALTER TABLE "instance" DROP COLUMN "faviconUrl"`);
     }
 }
-exports.instanceFavicon1603781553011 = instanceFavicon1603781553011;

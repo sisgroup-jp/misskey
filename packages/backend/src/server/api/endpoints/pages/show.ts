@@ -1,32 +1,25 @@
-import $ from 'cafy';
-import define from '../../define';
-import { ApiError } from '../../error';
-import { Pages, Users } from '@/models/index';
-import { ID } from '@/misc/cafy-id';
-import { Page } from '@/models/entities/page';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { IsNull } from 'typeorm';
+import { Inject, Injectable } from '@nestjs/common';
+import type { UsersRepository, PagesRepository } from '@/models/_.js';
+import type { MiPage } from '@/models/Page.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { PageEntityService } from '@/core/entities/PageEntityService.js';
+import { DI } from '@/di-symbols.js';
+import { ApiError } from '../../error.js';
 
 export const meta = {
 	tags: ['pages'],
 
-	requireCredential: false as const,
-
-	params: {
-		pageId: {
-			validator: $.optional.type(ID),
-		},
-
-		name: {
-			validator: $.optional.str,
-		},
-
-		username: {
-			validator: $.optional.str,
-		},
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		ref: 'Page',
 	},
 
@@ -34,32 +27,58 @@ export const meta = {
 		noSuchPage: {
 			message: 'No such page.',
 			code: 'NO_SUCH_PAGE',
-			id: '222120c0-3ead-4528-811b-b96f233388d7'
-		}
-	}
-};
+			id: '222120c0-3ead-4528-811b-b96f233388d7',
+		},
+	},
+} as const;
 
-export default define(meta, async (ps, user) => {
-	let page: Page | undefined;
+export const paramDef = {
+	type: 'object',
+	properties: {
+		pageId: { type: 'string', format: 'misskey:id' },
+		name: { type: 'string' },
+		username: { type: 'string' },
+	},
+	anyOf: [
+		{ required: ['pageId'] },
+		{ required: ['name', 'username'] },
+	],
+} as const;
 
-	if (ps.pageId) {
-		page = await Pages.findOne(ps.pageId);
-	} else if (ps.name && ps.username) {
-		const author = await Users.findOne({
-			host: null,
-			usernameLower: ps.username.toLowerCase()
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
+
+		@Inject(DI.pagesRepository)
+		private pagesRepository: PagesRepository,
+
+		private pageEntityService: PageEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			let page: MiPage | null = null;
+
+			if (ps.pageId) {
+				page = await this.pagesRepository.findOneBy({ id: ps.pageId });
+			} else if (ps.name && ps.username) {
+				const author = await this.usersRepository.findOneBy({
+					host: IsNull(),
+					usernameLower: ps.username.toLowerCase(),
+				});
+				if (author) {
+					page = await this.pagesRepository.findOneBy({
+						name: ps.name,
+						userId: author.id,
+					});
+				}
+			}
+
+			if (page == null) {
+				throw new ApiError(meta.errors.noSuchPage);
+			}
+
+			return await this.pageEntityService.pack(page, me);
 		});
-		if (author) {
-			page = await Pages.findOne({
-				name: ps.name,
-				userId: author.id
-			});
-		}
 	}
-
-	if (page == null) {
-		throw new ApiError(meta.errors.noSuchPage);
-	}
-
-	return await Pages.pack(page, user);
-});
+}

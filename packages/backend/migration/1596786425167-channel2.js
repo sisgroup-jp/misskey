@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class channel21596786425167 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class channel21596786425167 {
     constructor() {
         this.name = 'channel21596786425167';
     }
@@ -11,4 +14,3 @@ class channel21596786425167 {
         await queryRunner.query(`ALTER TABLE "channel_following" DROP COLUMN "readCursor"`);
     }
 }
-exports.channel21596786425167 = channel21596786425167;

@@ -1,47 +1,64 @@
-import define from '../../../define';
-import { listRelay } from '@/services/relay';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { RelayService } from '@/core/RelayService.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
-	requireModerator: true as const,
-
-	params: {
-	},
+	requireCredential: true,
+	requireModerator: true,
+	kind: 'read:admin:relays',
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			properties: {
 				id: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'id'
+					type: 'string',
+					optional: false, nullable: false,
+					format: 'id',
 				},
 				inbox: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'url'
+					type: 'string',
+					optional: false, nullable: false,
+					format: 'url',
 				},
 				status: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
+					type: 'string',
+					optional: false, nullable: false,
 					default: 'requesting',
 					enum: [
 						'requesting',
 						'accepted',
-						'rejected'
-					]
-				}
-			}
-		}
-	}
-};
+						'rejected',
+					],
+				},
+			},
+		},
+	},
+} as const;
 
-export default define(meta, async (ps, user) => {
-	return await listRelay();
-});
+export const paramDef = {
+	type: 'object',
+	properties: {},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private relayService: RelayService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			return await this.relayService.listRelay();
+		});
+	}
+}

@@ -1,598 +1,442 @@
-import $ from 'cafy';
-import config from '@/config/index';
-import define from '../define';
-import { fetchMeta } from '@/misc/fetch-meta';
-import { Ads, Emojis, Users } from '@/models/index';
-import { DB_MAX_NOTE_TEXT_LENGTH } from '@/misc/hard-limits';
-import { MoreThan } from 'typeorm';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { IsNull, LessThanOrEqual, MoreThan, Brackets } from 'typeorm';
+import { Inject, Injectable } from '@nestjs/common';
+import JSON5 from 'json5';
+import type { AdsRepository } from '@/models/_.js';
+import { MAX_NOTE_TEXT_LENGTH } from '@/const.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { UserEntityService } from '@/core/entities/UserEntityService.js';
+import { MetaService } from '@/core/MetaService.js';
+import { InstanceActorService } from '@/core/InstanceActorService.js';
+import type { Config } from '@/config.js';
+import { DI } from '@/di-symbols.js';
+import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 
 export const meta = {
 	tags: ['meta'],
 
-	requireCredential: false as const,
-
-	params: {
-		detail: {
-			validator: $.optional.bool,
-			default: true
-		}
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		properties: {
 			maintainerName: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			maintainerEmail: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			version: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				example: config.version
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			providesTarball: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			name: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			shortName: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			uri: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
+				type: 'string',
+				optional: false, nullable: false,
 				format: 'url',
-				example: 'https://misskey.example.com'
+				example: 'https://misskey.example.com',
 			},
 			description: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const,
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			langs: {
-				type: 'array' as const,
-				optional: false as const, nullable: false as const,
+				type: 'array',
+				optional: false, nullable: false,
 				items: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const
-				}
+					type: 'string',
+					optional: false, nullable: false,
+				},
 			},
 			tosUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			repositoryUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				default: 'https://github.com/misskey-dev/misskey'
+				type: 'string',
+				optional: false, nullable: true,
+				default: 'https://github.com/misskey-dev/misskey',
 			},
 			feedbackUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				default: 'https://github.com/misskey-dev/misskey/issues/new'
+				type: 'string',
+				optional: false, nullable: true,
+				default: 'https://github.com/misskey-dev/misskey/issues/new',
 			},
-			secure: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
-				default: false
+			defaultDarkTheme: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			defaultLightTheme: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			disableRegistration: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
-			},
-			disableLocalTimeline: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
-			},
-			disableGlobalTimeline: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
-			},
-			driveCapacityPerLocalUserMb: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const
-			},
-			driveCapacityPerRemoteUserMb: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			cacheRemoteFiles: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
-			proxyRemoteFiles: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+			cacheRemoteSensitiveFiles: {
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			emailRequiredForSignup: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			enableHcaptcha: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			hcaptchaSiteKey: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			enableMcaptcha: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			mcaptchaSiteKey: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			mcaptchaInstanceUrl: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			enableRecaptcha: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			recaptchaSiteKey: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			enableTurnstile: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			turnstileSiteKey: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			swPublickey: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			mascotImageUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				default: '/assets/ai.png'
+				type: 'string',
+				optional: false, nullable: false,
+				default: '/assets/ai.png',
 			},
 			bannerUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const
+				type: 'string',
+				optional: false, nullable: false,
 			},
-			errorImageUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				default: 'https://xn--931a.moe/aiart/yubitun.png'
+			serverErrorImageUrl: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			infoImageUrl: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			notFoundImageUrl: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			iconUrl: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
 			},
 			maxNoteTextLength: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
-				default: 500
-			},
-			emojis: {
-				type: 'array' as const,
-				optional: false as const, nullable: false as const,
-				items: {
-					type: 'object' as const,
-					optional: false as const, nullable: false as const,
-					properties: {
-						id: {
-							type: 'string' as const,
-							optional: false as const, nullable: false as const,
-							format: 'id'
-						},
-						aliases: {
-							type: 'array' as const,
-							optional: false as const, nullable: false as const,
-							items: {
-								type: 'string' as const,
-								optional: false as const, nullable: false as const
-							}
-						},
-						category: {
-							type: 'string' as const,
-							optional: false as const, nullable: true as const
-						},
-						host: {
-							type: 'string' as const,
-							optional: false as const, nullable: true as const
-						},
-						url: {
-							type: 'string' as const,
-							optional: false as const, nullable: false as const,
-							format: 'url'
-						}
-					}
-				}
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			ads: {
-				type: 'array' as const,
-				optional: false as const, nullable: false as const,
+				type: 'array',
+				optional: false, nullable: false,
 				items: {
-					type: 'object' as const,
-					optional: false as const, nullable: false as const,
+					type: 'object',
+					optional: false, nullable: false,
 					properties: {
-						place: {
-							type: 'string' as const,
-							optional: false as const, nullable: false as const
+						id: {
+							type: 'string',
+							optional: false, nullable: false,
+							format: 'id',
+							example: 'xxxxxxxxxx',
 						},
 						url: {
-							type: 'string' as const,
-							optional: false as const, nullable: false as const,
-							format: 'url'
+							type: 'string',
+							optional: false, nullable: false,
+							format: 'url',
+						},
+						place: {
+							type: 'string',
+							optional: false, nullable: false,
+						},
+						ratio: {
+							type: 'number',
+							optional: false, nullable: false,
 						},
 						imageUrl: {
-							type: 'string' as const,
-							optional: false as const, nullable: false as const,
-							format: 'url'
+							type: 'string',
+							optional: false, nullable: false,
+							format: 'url',
 						},
-					}
-				}
+						dayOfWeek: {
+							type: 'integer',
+							optional: false, nullable: false,
+						},
+					},
+				},
+			},
+			notesPerOneAd: {
+				type: 'number',
+				optional: false, nullable: false,
+				default: 0,
 			},
 			requireSetup: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
-				example: false
+				type: 'boolean',
+				optional: false, nullable: false,
+				example: false,
 			},
 			enableEmail: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
-			},
-			enableTwitterIntegration: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
-			},
-			enableGithubIntegration: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
-			},
-			enableDiscordIntegration: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			enableServiceWorker: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			translatorAvailable: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			proxyAccountName: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			mediaProxy: {
+				type: 'string',
+				optional: false, nullable: false,
 			},
 			features: {
-				type: 'object' as const,
-				optional: true as const, nullable: false as const,
+				type: 'object',
+				optional: true, nullable: false,
 				properties: {
 					registration: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
-					localTimeLine: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+					localTimeline: {
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
-					globalTimeLine: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
-					},
-					elasticsearch: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+					globalTimeline: {
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
 					hcaptcha: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
 					recaptcha: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
 					objectStorage: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
-					},
-					twitter: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
-					},
-					github: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
-					},
-					discord: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
 					serviceWorker: {
-						type: 'boolean' as const,
-						optional: false as const, nullable: false as const
+						type: 'boolean',
+						optional: false, nullable: false,
 					},
 					miauth: {
-						type: 'boolean' as const,
-						optional: true as const, nullable: false as const,
-						default: true
+						type: 'boolean',
+						optional: true, nullable: false,
+						default: true,
 					},
-				}
+				},
 			},
-			userStarForReactionFallback: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const,
+			backgroundImageUrl: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
-			pinnedUsers: {
-				type: 'array' as const,
-				optional: true as const, nullable: false as const,
+			impressumUrl: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			logoImageUrl: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			privacyPolicyUrl: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			serverRules: {
+				type: 'array',
+				optional: false, nullable: false,
 				items: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const
-				}
+					type: 'string',
+				},
 			},
-			hiddenTags: {
-				type: 'array' as const,
-				optional: true as const, nullable: false as const,
-				items: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const
-				}
+			themeColor: {
+				type: 'string',
+				optional: false, nullable: true,
 			},
-			blockedHosts: {
-				type: 'array' as const,
-				optional: true as const, nullable: false as const,
-				items: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const
-				}
+			policies: {
+				type: 'object',
+				optional: false, nullable: false,
+				ref: 'RolePolicies',
 			},
-			hcaptchaSecretKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			recaptchaSecretKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			proxyAccountId: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const,
-				format: 'id'
-			},
-			twitterConsumerKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			twitterConsumerSecret: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			githubClientId: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			githubClientSecret: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			discordClientId: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			discordClientSecret: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			summaryProxy: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			email: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			smtpSecure: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const
-			},
-			smtpHost: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			smtpPort: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			smtpUser: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			smtpPass: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			swPrivateKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			useObjectStorage: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const
-			},
-			objectStorageBaseUrl: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageBucket: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStoragePrefix: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageEndpoint: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageRegion: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStoragePort: {
-				type: 'number' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageAccessKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageSecretKey: {
-				type: 'string' as const,
-				optional: true as const, nullable: true as const
-			},
-			objectStorageUseSSL: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const
-			},
-			objectStorageUseProxy: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const
-			},
-			objectStorageSetPublicRead: {
-				type: 'boolean' as const,
-				optional: true as const, nullable: false as const
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		detail: { type: 'boolean', default: true },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.config)
+		private config: Config,
+
+		@Inject(DI.adsRepository)
+		private adsRepository: AdsRepository,
+
+		private userEntityService: UserEntityService,
+		private metaService: MetaService,
+		private instanceActorService: InstanceActorService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const instance = await this.metaService.fetch(true);
+
+			const ads = await this.adsRepository.createQueryBuilder('ads')
+				.where('ads.expiresAt > :now', { now: new Date() })
+				.andWhere('ads.startsAt <= :now', { now: new Date() })
+				.andWhere(new Brackets(qb => {
+					// 曜日のビットフラグを確認する
+					qb.where('ads.dayOfWeek & :dayOfWeek > 0', { dayOfWeek: 1 << new Date().getDay() })
+						.orWhere('ads.dayOfWeek = 0');
+				}))
+				.getMany();
+
+			const response: any = {
+				maintainerName: instance.maintainerName,
+				maintainerEmail: instance.maintainerEmail,
+
+				version: this.config.version,
+				providesTarball: this.config.publishTarballInsteadOfProvideRepositoryUrl,
+
+				name: instance.name,
+				shortName: instance.shortName,
+				uri: this.config.url,
+				description: instance.description,
+				langs: instance.langs,
+				tosUrl: instance.termsOfServiceUrl,
+				repositoryUrl: instance.repositoryUrl,
+				feedbackUrl: instance.feedbackUrl,
+				impressumUrl: instance.impressumUrl,
+				privacyPolicyUrl: instance.privacyPolicyUrl,
+				disableRegistration: instance.disableRegistration,
+				emailRequiredForSignup: instance.emailRequiredForSignup,
+				enableHcaptcha: instance.enableHcaptcha,
+				hcaptchaSiteKey: instance.hcaptchaSiteKey,
+				enableMcaptcha: instance.enableMcaptcha,
+				mcaptchaSiteKey: instance.mcaptchaSitekey,
+				mcaptchaInstanceUrl: instance.mcaptchaInstanceUrl,
+				enableRecaptcha: instance.enableRecaptcha,
+				recaptchaSiteKey: instance.recaptchaSiteKey,
+				enableTurnstile: instance.enableTurnstile,
+				turnstileSiteKey: instance.turnstileSiteKey,
+				swPublickey: instance.swPublicKey,
+				themeColor: instance.themeColor,
+				mascotImageUrl: instance.mascotImageUrl,
+				bannerUrl: instance.bannerUrl,
+				infoImageUrl: instance.infoImageUrl,
+				serverErrorImageUrl: instance.serverErrorImageUrl,
+				notFoundImageUrl: instance.notFoundImageUrl,
+				iconUrl: instance.iconUrl,
+				backgroundImageUrl: instance.backgroundImageUrl,
+				logoImageUrl: instance.logoImageUrl,
+				maxNoteTextLength: MAX_NOTE_TEXT_LENGTH,
+				// クライアントの手間を減らすためあらかじめJSONに変換しておく
+				defaultLightTheme: instance.defaultLightTheme ? JSON.stringify(JSON5.parse(instance.defaultLightTheme)) : null,
+				defaultDarkTheme: instance.defaultDarkTheme ? JSON.stringify(JSON5.parse(instance.defaultDarkTheme)) : null,
+				ads: ads.map(ad => ({
+					id: ad.id,
+					url: ad.url,
+					place: ad.place,
+					ratio: ad.ratio,
+					imageUrl: ad.imageUrl,
+					dayOfWeek: ad.dayOfWeek,
+				})),
+				notesPerOneAd: instance.notesPerOneAd,
+				enableEmail: instance.enableEmail,
+				enableServiceWorker: instance.enableServiceWorker,
+
+				translatorAvailable: instance.deeplAuthKey != null,
+
+				serverRules: instance.serverRules,
+
+				policies: { ...DEFAULT_POLICIES, ...instance.policies },
+
+				mediaProxy: this.config.mediaProxy,
+
+				...(ps.detail ? {
+					cacheRemoteFiles: instance.cacheRemoteFiles,
+					cacheRemoteSensitiveFiles: instance.cacheRemoteSensitiveFiles,
+					requireSetup: !await this.instanceActorService.realLocalUsersPresent(),
+				} : {}),
+			};
+
+			if (ps.detail) {
+				const proxyAccount = instance.proxyAccountId ? await this.userEntityService.pack(instance.proxyAccountId).catch(() => null) : null;
+
+				response.proxyAccountName = proxyAccount ? proxyAccount.username : null;
+				response.features = {
+					registration: !instance.disableRegistration,
+					emailRequiredForSignup: instance.emailRequiredForSignup,
+					hcaptcha: instance.enableHcaptcha,
+					recaptcha: instance.enableRecaptcha,
+					turnstile: instance.enableTurnstile,
+					objectStorage: instance.useObjectStorage,
+					serviceWorker: instance.enableServiceWorker,
+					miauth: true,
+				};
 			}
-		}
+
+			return response;
+		});
 	}
-};
-
-export default define(meta, async (ps, me) => {
-	const instance = await fetchMeta(true);
-
-	const emojis = await Emojis.find({
-		where: {
-			host: null
-		},
-		order: {
-			category: 'ASC',
-			name: 'ASC'
-		},
-		cache: {
-			id: 'meta_emojis',
-			milliseconds: 3600000	// 1 hour
-		}
-	});
-
-	const ads = await Ads.find({
-		where: {
-			expiresAt: MoreThan(new Date())
-		},
-	});
-
-	const response: any = {
-		maintainerName: instance.maintainerName,
-		maintainerEmail: instance.maintainerEmail,
-
-		version: config.version,
-
-		name: instance.name,
-		uri: config.url,
-		description: instance.description,
-		langs: instance.langs,
-		tosUrl: instance.ToSUrl,
-		repositoryUrl: instance.repositoryUrl,
-		feedbackUrl: instance.feedbackUrl,
-
-		secure: config.https != null,
-
-		disableRegistration: instance.disableRegistration,
-		disableLocalTimeline: instance.disableLocalTimeline,
-		disableGlobalTimeline: instance.disableGlobalTimeline,
-		driveCapacityPerLocalUserMb: instance.localDriveCapacityMb,
-		driveCapacityPerRemoteUserMb: instance.remoteDriveCapacityMb,
-		emailRequiredForSignup: instance.emailRequiredForSignup,
-		enableHcaptcha: instance.enableHcaptcha,
-		hcaptchaSiteKey: instance.hcaptchaSiteKey,
-		enableRecaptcha: instance.enableRecaptcha,
-		recaptchaSiteKey: instance.recaptchaSiteKey,
-		swPublickey: instance.swPublicKey,
-		mascotImageUrl: instance.mascotImageUrl,
-		bannerUrl: instance.bannerUrl,
-		errorImageUrl: instance.errorImageUrl,
-		iconUrl: instance.iconUrl,
-		backgroundImageUrl: instance.backgroundImageUrl,
-		logoImageUrl: instance.logoImageUrl,
-		maxNoteTextLength: Math.min(instance.maxNoteTextLength, DB_MAX_NOTE_TEXT_LENGTH),
-		emojis: await Emojis.packMany(emojis),
-		ads: ads.map(ad => ({
-			id: ad.id,
-			url: ad.url,
-			place: ad.place,
-			ratio: ad.ratio,
-			imageUrl: ad.imageUrl,
-		})),
-		enableEmail: instance.enableEmail,
-
-		enableTwitterIntegration: instance.enableTwitterIntegration,
-		enableGithubIntegration: instance.enableGithubIntegration,
-		enableDiscordIntegration: instance.enableDiscordIntegration,
-
-		enableServiceWorker: instance.enableServiceWorker,
-
-		translatorAvailable: instance.deeplAuthKey != null,
-
-		...(ps.detail ? {
-			pinnedPages: instance.pinnedPages,
-			pinnedClipId: instance.pinnedClipId,
-			cacheRemoteFiles: instance.cacheRemoteFiles,
-			proxyRemoteFiles: instance.proxyRemoteFiles,
-			requireSetup: (await Users.count({
-				host: null,
-			})) === 0,
-		} : {})
-	};
-
-	if (ps.detail) {
-		const proxyAccount = instance.proxyAccountId ? await Users.pack(instance.proxyAccountId).catch(() => null) : null;
-
-		response.proxyAccountName = proxyAccount ? proxyAccount.username : null;
-		response.features = {
-			registration: !instance.disableRegistration,
-			localTimeLine: !instance.disableLocalTimeline,
-			globalTimeLine: !instance.disableGlobalTimeline,
-			emailRequiredForSignup: instance.emailRequiredForSignup,
-			elasticsearch: config.elasticsearch ? true : false,
-			hcaptcha: instance.enableHcaptcha,
-			recaptcha: instance.enableRecaptcha,
-			objectStorage: instance.useObjectStorage,
-			twitter: instance.enableTwitterIntegration,
-			github: instance.enableGithubIntegration,
-			discord: instance.enableDiscordIntegration,
-			serviceWorker: instance.enableServiceWorker,
-			miauth: true,
-		};
-
-		if (me && me.isAdmin) {
-			response.useStarForReactionFallback = instance.useStarForReactionFallback;
-			response.pinnedUsers = instance.pinnedUsers;
-			response.hiddenTags = instance.hiddenTags;
-			response.blockedHosts = instance.blockedHosts;
-			response.hcaptchaSecretKey = instance.hcaptchaSecretKey;
-			response.recaptchaSecretKey = instance.recaptchaSecretKey;
-			response.proxyAccountId = instance.proxyAccountId;
-			response.twitterConsumerKey = instance.twitterConsumerKey;
-			response.twitterConsumerSecret = instance.twitterConsumerSecret;
-			response.githubClientId = instance.githubClientId;
-			response.githubClientSecret = instance.githubClientSecret;
-			response.discordClientId = instance.discordClientId;
-			response.discordClientSecret = instance.discordClientSecret;
-			response.summalyProxy = instance.summalyProxy;
-			response.email = instance.email;
-			response.smtpSecure = instance.smtpSecure;
-			response.smtpHost = instance.smtpHost;
-			response.smtpPort = instance.smtpPort;
-			response.smtpUser = instance.smtpUser;
-			response.smtpPass = instance.smtpPass;
-			response.swPrivateKey = instance.swPrivateKey;
-			response.useObjectStorage = instance.useObjectStorage;
-			response.objectStorageBaseUrl = instance.objectStorageBaseUrl;
-			response.objectStorageBucket = instance.objectStorageBucket;
-			response.objectStoragePrefix = instance.objectStoragePrefix;
-			response.objectStorageEndpoint = instance.objectStorageEndpoint;
-			response.objectStorageRegion = instance.objectStorageRegion;
-			response.objectStoragePort = instance.objectStoragePort;
-			response.objectStorageAccessKey = instance.objectStorageAccessKey;
-			response.objectStorageSecretKey = instance.objectStorageSecretKey;
-			response.objectStorageUseSSL = instance.objectStorageUseSSL;
-			response.objectStorageUseProxy = instance.objectStorageUseProxy;
-			response.objectStorageSetPublicRead = instance.objectStorageSetPublicRead;
-			response.objectStorageS3ForcePathStyle = instance.objectStorageS3ForcePathStyle;
-			response.deeplAuthKey = instance.deeplAuthKey;
-			response.deeplIsPro = instance.deeplIsPro;
-		}
-	}
-
-	return response;
-});
+}

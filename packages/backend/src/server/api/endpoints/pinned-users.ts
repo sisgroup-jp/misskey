@@ -1,32 +1,58 @@
-import define from '../define';
-import { Users } from '@/models/index';
-import { fetchMeta } from '@/misc/fetch-meta';
-import * as Acct from 'misskey-js/built/acct';
-import { User } from '@/models/entities/user';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { IsNull } from 'typeorm';
+import { Inject, Injectable } from '@nestjs/common';
+import type { UsersRepository } from '@/models/_.js';
+import * as Acct from '@/misc/acct.js';
+import type { MiUser } from '@/models/User.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { MetaService } from '@/core/MetaService.js';
+import { UserEntityService } from '@/core/entities/UserEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['users'],
 
-	requireCredential: false as const,
-
-	params: {
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
-			ref: 'User',
-		}
+			type: 'object',
+			optional: false, nullable: false,
+			ref: 'UserDetailed',
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, me) => {
-	const meta = await fetchMeta();
+export const paramDef = {
+	type: 'object',
+	properties: {},
+	required: [],
+} as const;
 
-	const users = await Promise.all(meta.pinnedUsers.map(acct => Users.findOne(Acct.parse(acct))));
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
 
-	return await Users.packMany(users.filter(x => x !== undefined) as User[], me, { detail: true });
-});
+		private metaService: MetaService,
+		private userEntityService: UserEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const meta = await this.metaService.fetch();
+
+			const users = await Promise.all(meta.pinnedUsers.map(acct => Acct.parse(acct)).map(acct => this.usersRepository.findOneBy({
+				usernameLower: acct.username.toLowerCase(),
+				host: acct.host ?? IsNull(),
+			})));
+
+			return await this.userEntityService.packMany(users.filter(x => x !== null) as MiUser[], me, { schema: 'UserDetailed' });
+		});
+	}
+}

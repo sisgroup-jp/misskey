@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class ObjectStorageSetting1557932705754 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class ObjectStorageSetting1557932705754 {
     async up(queryRunner) {
         await queryRunner.query(`ALTER TABLE "meta" ADD "useObjectStorage" boolean NOT NULL DEFAULT false`);
         await queryRunner.query(`ALTER TABLE "meta" ADD "objectStorageBucket" character varying(512)`);
@@ -26,4 +29,3 @@ class ObjectStorageSetting1557932705754 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "useObjectStorage"`);
     }
 }
-exports.ObjectStorageSetting1557932705754 = ObjectStorageSetting1557932705754;

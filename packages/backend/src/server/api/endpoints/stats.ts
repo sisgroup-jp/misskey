@@ -1,83 +1,104 @@
-import define from '../define';
-import { NoteReactions, Notes, Users } from '@/models/index';
-import { federationChart, driveChart } from '@/services/chart/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import type { InstancesRepository, NoteReactionsRepository } from '@/models/_.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { DI } from '@/di-symbols.js';
+import NotesChart from '@/core/chart/charts/notes.js';
+import UsersChart from '@/core/chart/charts/users.js';
 
 export const meta = {
-	requireCredential: false as const,
+	requireCredential: false,
 
 	tags: ['meta'],
 
-	params: {
-	},
-
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		properties: {
 			notesCount: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			originalNotesCount: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			usersCount: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			originalUsersCount: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			instances: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			driveUsageLocal: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const
+				type: 'number',
+				optional: false, nullable: false,
 			},
 			driveUsageRemote: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const
-			}
-		}
+				type: 'number',
+				optional: false, nullable: false,
+			},
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.instancesRepository)
+		private instancesRepository: InstancesRepository,
+
+		@Inject(DI.noteReactionsRepository)
+		private noteReactionsRepository: NoteReactionsRepository,
+
+		private notesChart: NotesChart,
+		private usersChart: UsersChart,
+	) {
+		super(meta, paramDef, async () => {
+			const notesChart = await this.notesChart.getChart('hour', 1, null);
+			const notesCount = notesChart.local.total[0] + notesChart.remote.total[0];
+			const originalNotesCount = notesChart.local.total[0];
+
+			const usersChart = await this.usersChart.getChart('hour', 1, null);
+			const usersCount = usersChart.local.total[0] + usersChart.remote.total[0];
+			const originalUsersCount = usersChart.local.total[0];
+
+			const [
+				reactionsCount,
+				//originalReactionsCount,
+				instances,
+			] = await Promise.all([
+				this.noteReactionsRepository.count({ cache: 3600000 }), // 1 hour
+				//this.noteReactionsRepository.count({ where: { userHost: IsNull() }, cache: 3600000 }),
+				this.instancesRepository.count({ cache: 3600000 }),
+			]);
+
+			return {
+				notesCount,
+				originalNotesCount,
+				usersCount,
+				originalUsersCount,
+				reactionsCount,
+				//originalReactionsCount,
+				instances,
+				driveUsageLocal: 0,
+				driveUsageRemote: 0,
+			};
+		});
 	}
-};
-
-export default define(meta, async () => {
-	const [
-		notesCount,
-		originalNotesCount,
-		usersCount,
-		originalUsersCount,
-		reactionsCount,
-		//originalReactionsCount,
-		instances,
-		driveUsageLocal,
-		driveUsageRemote
-	] = await Promise.all([
-		Notes.count({ cache: 3600000 }), // 1 hour
-		Notes.count({ where: { userHost: null }, cache: 3600000 }),
-		Users.count({ cache: 3600000 }),
-		Users.count({ where: { host: null }, cache: 3600000 }),
-		NoteReactions.count({ cache: 3600000 }), // 1 hour
-		//NoteReactions.count({ where: { userHost: null }, cache: 3600000 }),
-		federationChart.getChart('hour', 1, null).then(chart => chart.instance.total[0]),
-		driveChart.getChart('hour', 1, null).then(chart => chart.local.totalSize[0]),
-		driveChart.getChart('hour', 1, null).then(chart => chart.remote.totalSize[0]),
-	]);
-
-	return {
-		notesCount,
-		originalNotesCount,
-		usersCount,
-		originalUsersCount,
-		reactionsCount,
-		//originalReactionsCount,
-		instances,
-		driveUsageLocal,
-		driveUsageRemote
-	};
-});
+}

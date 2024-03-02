@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class noteThreadMute1635500777168 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class noteThreadMute1635500777168 {
     constructor() {
         this.name = 'noteThreadMute1635500777168';
     }
@@ -23,4 +26,3 @@ class noteThreadMute1635500777168 {
         await queryRunner.query(`DROP TABLE "note_thread_muting"`);
     }
 }
-exports.noteThreadMute1635500777168 = noteThreadMute1635500777168;

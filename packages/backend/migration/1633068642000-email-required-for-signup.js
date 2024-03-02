@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class emailRequiredForSignup1633068642000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class emailRequiredForSignup1633068642000 {
     constructor() {
         this.name = 'emailRequiredForSignup1633068642000';
     }
@@ -11,4 +14,3 @@ class emailRequiredForSignup1633068642000 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "emailRequiredForSignup"`);
     }
 }
-exports.emailRequiredForSignup1633068642000 = emailRequiredForSignup1633068642000;

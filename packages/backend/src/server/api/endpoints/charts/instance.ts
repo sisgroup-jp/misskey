@@ -1,34 +1,41 @@
-import $ from 'cafy';
-import define from '../../define';
-import { convertLog } from '@/services/chart/core';
-import { instanceChart } from '@/services/chart/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { getJsonSchema } from '@/core/chart/core.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import InstanceChart from '@/core/chart/charts/instance.js';
+import { schema } from '@/core/chart/charts/entities/instance.js';
 
 export const meta = {
 	tags: ['charts'],
 
-	params: {
-		span: {
-			validator: $.str.or(['day', 'hour']),
-		},
+	res: getJsonSchema(schema),
 
-		limit: {
-			validator: $.optional.num.range(1, 500),
-			default: 30,
-		},
+	allowGet: true,
+	cacheSec: 60 * 60,
+} as const;
 
-		offset: {
-			validator: $.optional.nullable.num,
-			default: null,
-		},
-
-		host: {
-			validator: $.str,
-		}
+export const paramDef = {
+	type: 'object',
+	properties: {
+		span: { type: 'string', enum: ['day', 'hour'] },
+		limit: { type: 'integer', minimum: 1, maximum: 500, default: 30 },
+		offset: { type: 'integer', nullable: true, default: null },
+		host: { type: 'string' },
 	},
+	required: ['span', 'host'],
+} as const;
 
-	res: convertLog(instanceChart.schema),
-};
-
-export default define(meta, async (ps) => {
-	return await instanceChart.getChart(ps.span as any, ps.limit!, ps.offset ? new Date(ps.offset) : null, ps.host);
-});
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private instanceChart: InstanceChart,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			return await this.instanceChart.getChart(ps.span, ps.limit, ps.offset ? new Date(ps.offset) : null, ps.host);
+		});
+	}
+}

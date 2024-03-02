@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class ProxyRemoteFiles1576869585998 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class ProxyRemoteFiles1576869585998 {
     constructor() {
         this.name = 'ProxyRemoteFiles1576869585998';
     }
@@ -11,4 +14,3 @@ class ProxyRemoteFiles1576869585998 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "proxyRemoteFiles"`, undefined);
     }
 }
-exports.ProxyRemoteFiles1576869585998 = ProxyRemoteFiles1576869585998;

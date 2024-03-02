@@ -1,29 +1,49 @@
-import $ from 'cafy';
-import define from '../../define';
-import { Instances } from '@/models/index';
-import { toPuny } from '@/misc/convert-host';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { InstancesRepository } from '@/models/_.js';
+import { InstanceEntityService } from '@/core/entities/InstanceEntityService.js';
+import { UtilityService } from '@/core/UtilityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['federation'],
 
-	requireCredential: false as const,
-
-	params: {
-		host: {
-			validator: $.str
-		}
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
-		ref: 'FederationInstance'
+		type: 'object',
+		optional: false, nullable: true,
+		ref: 'FederationInstance',
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		host: { type: 'string' },
+	},
+	required: ['host'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.instancesRepository)
+		private instancesRepository: InstancesRepository,
+
+		private utilityService: UtilityService,
+		private instanceEntityService: InstanceEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const instance = await this.instancesRepository
+				.findOneBy({ host: this.utilityService.toPuny(ps.host) });
+
+			return instance ? await this.instanceEntityService.pack(instance) : null;
+		});
 	}
-};
-
-export default define(meta, async (ps, me) => {
-	const instance = await Instances
-		.findOne({ host: toPuny(ps.host) });
-
-	return instance;
-});
+}

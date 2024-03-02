@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class AddSomeUrls1557761316509 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class AddSomeUrls1557761316509 {
     async up(queryRunner) {
         await queryRunner.query(`ALTER TABLE "meta" ADD "ToSUrl" character varying(512)`);
         await queryRunner.query(`ALTER TABLE "meta" ADD "repositoryUrl" character varying(512) NOT NULL DEFAULT 'https://github.com/misskey-dev/misskey'`);
@@ -12,4 +15,3 @@ class AddSomeUrls1557761316509 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "ToSUrl"`);
     }
 }
-exports.AddSomeUrls1557761316509 = AddSomeUrls1557761316509;

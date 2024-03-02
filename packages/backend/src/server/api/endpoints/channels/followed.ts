@@ -1,49 +1,61 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { Channels, ChannelFollowings } from '@/models/index';
-import { makePaginationQuery } from '../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { ChannelFollowingsRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { ChannelEntityService } from '@/core/entities/ChannelEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['channels', 'account'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'read:channels',
 
-	params: {
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 5
-		},
-	},
-
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'Channel',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, me) => {
-	const query = makePaginationQuery(ChannelFollowings.createQueryBuilder(), ps.sinceId, ps.untilId)
-		.andWhere({ followerId: me.id });
+export const paramDef = {
+	type: 'object',
+	properties: {
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 5 },
+	},
+	required: [],
+} as const;
 
-	const followings = await query
-		.take(ps.limit!)
-		.getMany();
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.channelFollowingsRepository)
+		private channelFollowingsRepository: ChannelFollowingsRepository,
 
-	return await Promise.all(followings.map(x => Channels.pack(x.followeeId, me)));
-});
+		private channelEntityService: ChannelEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.channelFollowingsRepository.createQueryBuilder(), ps.sinceId, ps.untilId)
+				.andWhere({ followerId: me.id });
+
+			const followings = await query
+				.limit(ps.limit)
+				.getMany();
+
+			return await Promise.all(followings.map(x => this.channelEntityService.pack(x.followeeId, me)));
+		});
+	}
+}

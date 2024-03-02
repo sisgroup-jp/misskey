@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class deleteLog1634902659689 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class deleteLog1634902659689 {
     constructor() {
         this.name = 'deleteLog1634902659689';
     }
@@ -10,4 +13,3 @@ class deleteLog1634902659689 {
     async down(queryRunner) {
     }
 }
-exports.deleteLog1634902659689 = deleteLog1634902659689;

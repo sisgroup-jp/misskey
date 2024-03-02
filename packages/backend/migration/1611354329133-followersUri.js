@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class followersUri1611354329133 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class followersUri1611354329133 {
     constructor() {
         this.name = 'followersUri1611354329133';
     }
@@ -13,4 +16,3 @@ class followersUri1611354329133 {
         await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "followersUri"`);
     }
 }
-exports.followersUri1611354329133 = followersUri1611354329133;

@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class remoteReaction1586641139527 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class remoteReaction1586641139527 {
     constructor() {
         this.name = 'remoteReaction1586641139527';
     }
@@ -11,4 +14,3 @@ class remoteReaction1586641139527 {
         await queryRunner.query(`ALTER TABLE "note_reaction" ALTER COLUMN "reaction" TYPE character varying(130)`, undefined);
     }
 }
-exports.remoteReaction1586641139527 = remoteReaction1586641139527;

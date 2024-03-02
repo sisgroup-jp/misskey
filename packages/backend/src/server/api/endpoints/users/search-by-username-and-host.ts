@@ -1,116 +1,137 @@
-import $ from 'cafy';
-import define from '../../define';
-import { Followings, Users } from '@/models/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 import { Brackets } from 'typeorm';
-import { USER_ACTIVE_THRESHOLD } from '@/const';
-import { User } from '@/models/entities/user';
+import { Inject, Injectable } from '@nestjs/common';
+import type { UsersRepository, FollowingsRepository } from '@/models/_.js';
+import type { Config } from '@/config.js';
+import type { MiUser } from '@/models/User.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { UserEntityService } from '@/core/entities/UserEntityService.js';
+import { DI } from '@/di-symbols.js';
+import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 
 export const meta = {
 	tags: ['users'],
 
-	requireCredential: false as const,
+	requireCredential: false,
 
-	params: {
-		username: {
-			validator: $.optional.nullable.str,
-		},
-
-		host: {
-			validator: $.optional.nullable.str,
-		},
-
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10,
-		},
-
-		detail: {
-			validator: $.optional.bool,
-			default: true,
-		},
-	},
+	description: 'Search for a user by username and/or host.',
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'User',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, me) => {
-	const activeThreshold = new Date(Date.now() - (1000 * 60 * 60 * 24 * 30)); // 30日
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		detail: { type: 'boolean', default: true },
 
-	if (ps.host) {
-		const q = Users.createQueryBuilder('user')
-			.where('user.isSuspended = FALSE')
-			.andWhere('user.host LIKE :host', { host: ps.host.toLowerCase() + '%' });
+		username: { type: 'string', nullable: true },
+		host: { type: 'string', nullable: true },
+	},
+	anyOf: [
+		{ required: ['username'] },
+		{ required: ['host'] },
+	],
+} as const;
 
-		if (ps.username) {
-			q.andWhere('user.usernameLower LIKE :username', { username: ps.username.toLowerCase() + '%' });
-		}
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.config)
+		private config: Config,
 
-		q.andWhere('user.updatedAt IS NOT NULL');
-		q.orderBy('user.updatedAt', 'DESC');
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
 
-		const users = await q.take(ps.limit!).getMany();
+		@Inject(DI.followingsRepository)
+		private followingsRepository: FollowingsRepository,
 
-		return await Users.packMany(users, me, { detail: ps.detail });
-	} else if (ps.username) {
-		let users: User[] = [];
+		private userEntityService: UserEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const setUsernameAndHostQuery = (query = this.usersRepository.createQueryBuilder('user')) => {
+				if (ps.username) {
+					query.andWhere('user.usernameLower LIKE :username', { username: sqlLikeEscape(ps.username.toLowerCase()) + '%' });
+				}
 
-		if (me) {
-			const followingQuery = Followings.createQueryBuilder('following')
-				.select('following.followeeId')
-				.where('following.followerId = :followerId', { followerId: me.id });
+				if (ps.host) {
+					if (ps.host === this.config.hostname || ps.host === '.') {
+						query.andWhere('user.host IS NULL');
+					} else {
+						query.andWhere('user.host LIKE :host', {
+							host: sqlLikeEscape(ps.host.toLowerCase()) + '%',
+						});
+					}
+				}
 
-			const query = Users.createQueryBuilder('user')
-				.where(`user.id IN (${ followingQuery.getQuery() })`)
-				.andWhere(`user.id != :meId`, { meId: me.id })
-				.andWhere('user.isSuspended = FALSE')
-				.andWhere('user.usernameLower LIKE :username', { username: ps.username.toLowerCase() + '%' })
-				.andWhere(new Brackets(qb => { qb
-					.where('user.updatedAt IS NULL')
-					.orWhere('user.updatedAt > :activeThreshold', { activeThreshold: activeThreshold });
-				}));
+				return query;
+			};
 
-			query.setParameters(followingQuery.getParameters());
+			const activeThreshold = new Date(Date.now() - (1000 * 60 * 60 * 24 * 30)); // 30日
 
-			users = await query
-				.orderBy('user.usernameLower', 'ASC')
-				.take(ps.limit!)
-				.getMany();
+			let users: MiUser[] = [];
 
-			if (users.length < ps.limit!) {
-				const otherQuery = await Users.createQueryBuilder('user')
-					.where(`user.id NOT IN (${ followingQuery.getQuery() })`)
-					.andWhere(`user.id != :meId`, { meId: me.id })
+			if (me) {
+				const followingQuery = this.followingsRepository.createQueryBuilder('following')
+					.select('following.followeeId')
+					.where('following.followerId = :followerId', { followerId: me.id });
+
+				const query = setUsernameAndHostQuery()
+					.andWhere(`user.id IN (${ followingQuery.getQuery() })`)
+					.andWhere('user.id != :meId', { meId: me.id })
 					.andWhere('user.isSuspended = FALSE')
-					.andWhere('user.usernameLower LIKE :username', { username: ps.username.toLowerCase() + '%' })
-					.andWhere('user.updatedAt IS NOT NULL');
+					.andWhere(new Brackets(qb => {
+						qb
+							.where('user.updatedAt IS NULL')
+							.orWhere('user.updatedAt > :activeThreshold', { activeThreshold: activeThreshold });
+					}));
 
-				otherQuery.setParameters(followingQuery.getParameters());
+				query.setParameters(followingQuery.getParameters());
 
-				const otherUsers = await otherQuery
-					.orderBy('user.updatedAt', 'DESC')
-					.take(ps.limit! - users.length)
+				users = await query
+					.orderBy('user.usernameLower', 'ASC')
+					.limit(ps.limit)
 					.getMany();
 
-				users = users.concat(otherUsers);
-			}
-		} else {
-			users = await Users.createQueryBuilder('user')
-				.where('user.isSuspended = FALSE')
-				.andWhere('user.usernameLower LIKE :username', { username: ps.username.toLowerCase() + '%' })
-				.andWhere('user.updatedAt IS NOT NULL')
-				.orderBy('user.updatedAt', 'DESC')
-				.take(ps.limit! - users.length)
-				.getMany();
-		}
+				if (users.length < ps.limit) {
+					const otherQuery = setUsernameAndHostQuery()
+						.andWhere(`user.id NOT IN (${ followingQuery.getQuery() })`)
+						.andWhere('user.isSuspended = FALSE')
+						.andWhere('user.updatedAt IS NOT NULL');
 
-		return await Users.packMany(users, me, { detail: ps.detail });
+					otherQuery.setParameters(followingQuery.getParameters());
+
+					const otherUsers = await otherQuery
+						.orderBy('user.updatedAt', 'DESC')
+						.limit(ps.limit - users.length)
+						.getMany();
+
+					users = users.concat(otherUsers);
+				}
+			} else {
+				const query = setUsernameAndHostQuery()
+					.andWhere('user.isSuspended = FALSE')
+					.andWhere('user.updatedAt IS NOT NULL');
+
+				users = await query
+					.orderBy('user.updatedAt', 'DESC')
+					.limit(ps.limit - users.length)
+					.getMany();
+			}
+
+			return await this.userEntityService.packMany(users, me, { schema: ps.detail ? 'UserDetailed' : 'UserLite' });
+		});
 	}
-});
+}

@@ -1,33 +1,47 @@
-import $ from 'cafy';
-import define from '../../../define';
-import { RegistryItems } from '@/models/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { RegistryApiService } from '@/core/RegistryApiService.js';
 
 export const meta = {
-	requireCredential: true as const,
+	requireCredential: true,
+	kind: 'read:account',
 
-	secure: true,
+	res: {
+		type: 'object',
+	},
+} as const;
 
-	params: {
-		scope: {
-			validator: $.optional.arr($.str.match(/^[a-zA-Z0-9_]+$/)),
-			default: [],
-		},
+export const paramDef = {
+	type: 'object',
+	properties: {
+		scope: { type: 'array', default: [], items: {
+			type: 'string', pattern: /^[a-zA-Z0-9_]+$/.toString().slice(1, -1),
+		} },
+		domain: { type: 'string', nullable: true },
+	},
+	required: ['scope'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private registryApiService: RegistryApiService,
+	) {
+		super(meta, paramDef, async (ps, me, accessToken) => {
+			const items = await this.registryApiService.getAllItemsOfScope(me.id, accessToken != null ? accessToken.id : (ps.domain ?? null), ps.scope);
+
+			const res = {} as Record<string, any>;
+
+			for (const item of items) {
+				res[item.key] = item.value;
+			}
+
+			return res;
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	const query = RegistryItems.createQueryBuilder('item')
-		.where('item.domain IS NULL')
-		.andWhere('item.userId = :userId', { userId: user.id })
-		.andWhere('item.scope = :scope', { scope: ps.scope });
-
-	const items = await query.getMany();
-
-	const res = {} as Record<string, any>;
-
-	for (const item of items) {
-		res[item.key] = item.value;
-	}
-
-	return res;
-});
+}

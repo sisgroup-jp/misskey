@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class deeplIntegration21629778475000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class deeplIntegration21629778475000 {
     constructor() {
         this.name = 'deeplIntegration21629778475000';
     }
@@ -11,4 +14,3 @@ class deeplIntegration21629778475000 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "deeplIsPro"`);
     }
 }
-exports.deeplIntegration21629778475000 = deeplIntegration21629778475000;

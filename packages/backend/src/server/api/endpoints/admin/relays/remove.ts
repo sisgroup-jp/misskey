@@ -1,20 +1,35 @@
-import $ from 'cafy';
-import define from '../../../define';
-import { removeRelay } from '@/services/relay';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { RelayService } from '@/core/RelayService.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
-	requireModerator: true as const,
+	requireCredential: true,
+	requireModerator: true,
+	kind: 'write:admin:relays',
+} as const;
 
-	params: {
-		inbox: {
-			validator: $.str
-		},
+export const paramDef = {
+	type: 'object',
+	properties: {
+		inbox: { type: 'string' },
 	},
-};
+	required: ['inbox'],
+} as const;
 
-export default define(meta, async (ps, user) => {
-	return await removeRelay(ps.inbox);
-});
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private relayService: RelayService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			return await this.relayService.removeRelay(ps.inbox);
+		});
+	}
+}

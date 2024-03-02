@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class emailNotificationTypes1613155914446 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class emailNotificationTypes1613155914446 {
     constructor() {
         this.name = 'emailNotificationTypes1613155914446';
     }
@@ -11,4 +14,3 @@ class emailNotificationTypes1613155914446 {
         await queryRunner.query(`ALTER TABLE "user_profile" DROP COLUMN "emailNotificationTypes"`);
     }
 }
-exports.emailNotificationTypes1613155914446 = emailNotificationTypes1613155914446;

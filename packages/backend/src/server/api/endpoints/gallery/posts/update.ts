@@ -1,82 +1,92 @@
-import $ from 'cafy';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 import ms from 'ms';
-import define from '../../../define';
-import { ID } from '../../../../../misc/cafy-id';
-import { DriveFiles, GalleryPosts } from '@/models/index';
-import { GalleryPost } from '@/models/entities/gallery-post';
-import { ApiError } from '../../../error';
-import { DriveFile } from '@/models/entities/drive-file';
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { DriveFilesRepository, GalleryPostsRepository } from '@/models/_.js';
+import type { MiDriveFile } from '@/models/DriveFile.js';
+import { GalleryPostEntityService } from '@/core/entities/GalleryPostEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['gallery'],
 
-	requireCredential: true as const,
+	requireCredential: true,
+
+	prohibitMoved: true,
 
 	kind: 'write:gallery',
 
 	limit: {
 		duration: ms('1hour'),
-		max: 300
-	},
-
-	params: {
-		postId: {
-			validator: $.type(ID),
-		},
-
-		title: {
-			validator: $.str.min(1),
-		},
-
-		description: {
-			validator: $.optional.nullable.str,
-		},
-
-		fileIds: {
-			validator: $.arr($.type(ID)).unique().range(1, 32),
-		},
-
-		isSensitive: {
-			validator: $.optional.bool,
-			default: false,
-		},
+		max: 300,
 	},
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		ref: 'GalleryPost',
 	},
 
 	errors: {
 
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		postId: { type: 'string', format: 'misskey:id' },
+		title: { type: 'string', minLength: 1 },
+		description: { type: 'string', nullable: true },
+		fileIds: { type: 'array', uniqueItems: true, minItems: 1, maxItems: 32, items: {
+			type: 'string', format: 'misskey:id',
+		} },
+		isSensitive: { type: 'boolean', default: false },
+	},
+	required: ['postId', 'title', 'fileIds'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.galleryPostsRepository)
+		private galleryPostsRepository: GalleryPostsRepository,
+
+		@Inject(DI.driveFilesRepository)
+		private driveFilesRepository: DriveFilesRepository,
+
+		private galleryPostEntityService: GalleryPostEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const files = (await Promise.all(ps.fileIds.map(fileId =>
+				this.driveFilesRepository.findOneBy({
+					id: fileId,
+					userId: me.id,
+				}),
+			))).filter((file): file is MiDriveFile => file != null);
+
+			if (files.length === 0) {
+				throw new Error();
+			}
+
+			await this.galleryPostsRepository.update({
+				id: ps.postId,
+				userId: me.id,
+			}, {
+				updatedAt: new Date(),
+				title: ps.title,
+				description: ps.description,
+				isSensitive: ps.isSensitive,
+				fileIds: files.map(file => file.id),
+			});
+
+			const post = await this.galleryPostsRepository.findOneByOrFail({ id: ps.postId });
+
+			return await this.galleryPostEntityService.pack(post, me);
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	const files = (await Promise.all(ps.fileIds.map(fileId =>
-		DriveFiles.findOne({
-			id: fileId,
-			userId: user.id
-		})
-	))).filter((file): file is DriveFile => file != null);
-
-	if (files.length === 0) {
-		throw new Error();
-	}
-
-	await GalleryPosts.update({
-		id: ps.postId,
-		userId: user.id,
-	}, {
-		updatedAt: new Date(),
-		title: ps.title,
-		description: ps.description,
-		isSensitive: ps.isSensitive,
-		fileIds: files.map(file => file.id)
-	});
-
-	const post = await GalleryPosts.findOneOrFail(ps.postId);
-
-	return await GalleryPosts.pack(post, user);
-});
+}

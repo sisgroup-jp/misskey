@@ -1,34 +1,48 @@
-import $ from 'cafy';
-import define from '../../define';
-import { validateEmailForAccount } from '@/services/validate-email-for-account';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { EmailService } from '@/core/EmailService.js';
 
 export const meta = {
 	tags: ['users'],
 
-	requireCredential: false as const,
-
-	params: {
-		emailAddress: {
-			validator: $.str
-		}
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		properties: {
 			available: {
-				type: 'boolean' as const,
-				optional: false as const, nullable: false as const,
+				type: 'boolean',
+				optional: false, nullable: false,
 			},
 			reason: {
-				type: 'string' as const,
-				optional: false as const, nullable: true as const,
+				type: 'string',
+				optional: false, nullable: true,
 			},
-		}
-	}
-};
+		},
+	},
+} as const;
 
-export default define(meta, async (ps) => {
-	return await validateEmailForAccount(ps.emailAddress);
-});
+export const paramDef = {
+	type: 'object',
+	properties: {
+		emailAddress: { type: 'string' },
+	},
+	required: ['emailAddress'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private emailService: EmailService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			return await this.emailService.validateEmailForAccount(ps.emailAddress);
+		});
+	}
+}

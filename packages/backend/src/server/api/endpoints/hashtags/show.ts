@@ -1,23 +1,24 @@
-import $ from 'cafy';
-import define from '../../define';
-import { ApiError } from '../../error';
-import { Hashtags } from '@/models/index';
-import { normalizeForSearch } from '@/misc/normalize-for-search';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { HashtagsRepository } from '@/models/_.js';
+import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { HashtagEntityService } from '@/core/entities/HashtagEntityService.js';
+import { DI } from '@/di-symbols.js';
+import { ApiError } from '../../error.js';
 
 export const meta = {
 	tags: ['hashtags'],
 
-	requireCredential: false as const,
-
-	params: {
-		tag: {
-			validator: $.str,
-		}
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		ref: 'Hashtag',
 	},
 
@@ -25,16 +26,34 @@ export const meta = {
 		noSuchHashtag: {
 			message: 'No such hashtag.',
 			code: 'NO_SUCH_HASHTAG',
-			id: '110ee688-193e-4a3a-9ecf-c167b2e6981e'
-		}
-	}
-};
+			id: '110ee688-193e-4a3a-9ecf-c167b2e6981e',
+		},
+	},
+} as const;
 
-export default define(meta, async (ps, user) => {
-	const hashtag = await Hashtags.findOne({ name: normalizeForSearch(ps.tag) });
-	if (hashtag == null) {
-		throw new ApiError(meta.errors.noSuchHashtag);
-	}
+export const paramDef = {
+	type: 'object',
+	properties: {
+		tag: { type: 'string' },
+	},
+	required: ['tag'],
+} as const;
 
-	return await Hashtags.pack(hashtag);
-});
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.hashtagsRepository)
+		private hashtagsRepository: HashtagsRepository,
+
+		private hashtagEntityService: HashtagEntityService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const hashtag = await this.hashtagsRepository.findOneBy({ name: normalizeForSearch(ps.tag) });
+			if (hashtag == null) {
+				throw new ApiError(meta.errors.noSuchHashtag);
+			}
+
+			return await this.hashtagEntityService.pack(hashtag);
+		});
+	}
+}

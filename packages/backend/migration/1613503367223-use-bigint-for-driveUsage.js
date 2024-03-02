@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class useBigintForDriveUsage1613503367223 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class useBigintForDriveUsage1613503367223 {
     constructor() {
         this.name = 'useBigintForDriveUsage1613503367223';
     }
@@ -12,4 +15,3 @@ class useBigintForDriveUsage1613503367223 {
         await queryRunner.query(`ALTER TABLE "instance" ADD "driveUsage" integer NOT NULL DEFAULT 0`);
     }
 }
-exports.useBigintForDriveUsage1613503367223 = useBigintForDriveUsage1613503367223;

@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class customNotification1585385921215 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class customNotification1585385921215 {
     constructor() {
         this.name = 'customNotification1585385921215';
     }
@@ -45,4 +48,3 @@ class customNotification1585385921215 {
         await queryRunner.query(`ALTER TABLE "notification" DROP COLUMN "customBody"`, undefined);
     }
 }
-exports.customNotification1585385921215 = customNotification1585385921215;

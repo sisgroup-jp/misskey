@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class fixChannelUserId1629288472000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class fixChannelUserId1629288472000 {
     constructor() {
         this.name = 'fixChannelUserId1629288472000';
     }
@@ -11,4 +14,3 @@ class fixChannelUserId1629288472000 {
         await queryRunner.query(`ALTER TABLE "channel" ALTER COLUMN "userId" SET NOT NULL;`);
     }
 }
-exports.fixChannelUserId1629288472000 = fixChannelUserId1629288472000;

@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class addNoteIndexes1621479946000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class addNoteIndexes1621479946000 {
     constructor() {
         this.name = 'addNoteIndexes1621479946000';
     }
@@ -13,4 +16,3 @@ class addNoteIndexes1621479946000 {
         await queryRunner.query(`DROP INDEX "IDX_NOTE_VISIBLE_USER_IDS"`, undefined);
     }
 }
-exports.addNoteIndexes1621479946000 = addNoteIndexes1621479946000;

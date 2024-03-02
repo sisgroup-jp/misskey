@@ -1,63 +1,78 @@
-import { URL } from 'url';
-import $ from 'cafy';
-import define from '../../../define';
-import { addRelay } from '@/services/relay';
-import { ApiError } from '../../../error';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { URL } from 'node:url';
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { RelayService } from '@/core/RelayService.js';
+import { ApiError } from '../../../error.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
-	requireModerator: true as const,
-
-	params: {
-		inbox: {
-			validator: $.str
-		},
-	},
+	requireCredential: true,
+	requireModerator: true,
+	kind: 'write:admin:relays',
 
 	errors: {
 		invalidUrl: {
 			message: 'Invalid URL',
 			code: 'INVALID_URL',
-			id: 'fb8c92d3-d4e5-44e7-b3d4-800d5cef8b2c'
+			id: 'fb8c92d3-d4e5-44e7-b3d4-800d5cef8b2c',
 		},
 	},
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		properties: {
 			id: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				format: 'id'
+				type: 'string',
+				optional: false, nullable: false,
+				format: 'id',
 			},
 			inbox: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
-				format: 'url'
+				type: 'string',
+				optional: false, nullable: false,
+				format: 'url',
 			},
 			status: {
-				type: 'string' as const,
-				optional: false as const, nullable: false as const,
+				type: 'string',
+				optional: false, nullable: false,
 				default: 'requesting',
 				enum: [
 					'requesting',
 					'accepted',
-					'rejected'
-				]
+					'rejected',
+				],
+			},
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		inbox: { type: 'string' },
+	},
+	required: ['inbox'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private relayService: RelayService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			try {
+				if (new URL(ps.inbox).protocol !== 'https:') throw new Error('https only');
+			} catch {
+				throw new ApiError(meta.errors.invalidUrl);
 			}
-		}
-	}
-};
 
-export default define(meta, async (ps, user) => {
-	try {
-		if (new URL(ps.inbox).protocol !== 'https:') throw 'https only';
-	} catch {
-		throw new ApiError(meta.errors.invalidUrl);
+			return await this.relayService.addRelay(ps.inbox);
+		});
 	}
-
-	return await addRelay(ps.inbox);
-});
+}

@@ -1,28 +1,46 @@
-import $ from 'cafy';
-import define from '../../define';
-import { deleteFile } from '@/services/drive/delete-file';
-import { DriveFiles } from '@/models/index';
-import { ID } from '@/misc/cafy-id';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { DriveFilesRepository } from '@/models/_.js';
+import { DriveService } from '@/core/DriveService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
-	requireModerator: true,
+	requireCredential: true,
+	requireAdmin: true,
+	kind: 'write:admin:delete-all-files-of-a-user',
+} as const;
 
-	params: {
-		userId: {
-			validator: $.type(ID),
-		},
+export const paramDef = {
+	type: 'object',
+	properties: {
+		userId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['userId'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.driveFilesRepository)
+		private driveFilesRepository: DriveFilesRepository,
+
+		private driveService: DriveService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const files = await this.driveFilesRepository.findBy({
+				userId: ps.userId,
+			});
+
+			for (const file of files) {
+				this.driveService.deleteFile(file);
+			}
+		});
 	}
-};
-
-export default define(meta, async (ps, me) => {
-	const files = await DriveFiles.find({
-		userId: ps.userId
-	});
-
-	for (const file of files) {
-		deleteFile(file);
-	}
-});
+}

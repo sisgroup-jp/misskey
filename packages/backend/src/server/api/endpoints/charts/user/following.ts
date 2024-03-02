@@ -1,35 +1,41 @@
-import $ from 'cafy';
-import define from '../../../define';
-import { ID } from '@/misc/cafy-id';
-import { convertLog } from '@/services/chart/core';
-import { perUserFollowingChart } from '@/services/chart/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { getJsonSchema } from '@/core/chart/core.js';
+import PerUserFollowingChart from '@/core/chart/charts/per-user-following.js';
+import { schema } from '@/core/chart/charts/entities/per-user-following.js';
 
 export const meta = {
 	tags: ['charts', 'users', 'following'],
 
-	params: {
-		span: {
-			validator: $.str.or(['day', 'hour']),
-		},
+	res: getJsonSchema(schema),
 
-		limit: {
-			validator: $.optional.num.range(1, 500),
-			default: 30,
-		},
+	allowGet: true,
+	cacheSec: 60 * 60,
+} as const;
 
-		offset: {
-			validator: $.optional.nullable.num,
-			default: null,
-		},
-
-		userId: {
-			validator: $.type(ID),
-		}
+export const paramDef = {
+	type: 'object',
+	properties: {
+		span: { type: 'string', enum: ['day', 'hour'] },
+		limit: { type: 'integer', minimum: 1, maximum: 500, default: 30 },
+		offset: { type: 'integer', nullable: true, default: null },
+		userId: { type: 'string', format: 'misskey:id' },
 	},
+	required: ['span', 'userId'],
+} as const;
 
-	res: convertLog(perUserFollowingChart.schema),
-};
-
-export default define(meta, async (ps) => {
-	return await perUserFollowingChart.getChart(ps.span as any, ps.limit!, ps.offset ? new Date(ps.offset) : null, ps.userId);
-});
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private perUserFollowingChart: PerUserFollowingChart,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			return await this.perUserFollowingChart.getChart(ps.span, ps.limit, ps.offset ? new Date(ps.offset) : null, ps.userId);
+		});
+	}
+}

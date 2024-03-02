@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class channelUnread1597459042300 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class channelUnread1597459042300 {
     constructor() {
         this.name = 'channelUnread1597459042300';
     }
@@ -24,4 +27,3 @@ class channelUnread1597459042300 {
         await queryRunner.query(`ALTER TABLE "channel_following" ADD "readCursor" TIMESTAMP WITH TIME ZONE NOT NULL`);
     }
 }
-exports.channelUnread1597459042300 = channelUnread1597459042300;

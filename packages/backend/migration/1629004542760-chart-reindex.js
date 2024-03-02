@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class chartReindex1629004542760 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class chartReindex1629004542760 {
     constructor() {
         this.name = 'chartReindex1629004542760';
     }
@@ -179,4 +182,3 @@ class chartReindex1629004542760 {
         await queryRunner.query(`CREATE INDEX "IDX_0ad37b7ef50f4ddc84363d7ccc" ON "__chart__active_users" ("date") `);
     }
 }
-exports.chartReindex1629004542760 = chartReindex1629004542760;

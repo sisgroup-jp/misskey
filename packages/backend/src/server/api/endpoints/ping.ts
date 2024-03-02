@@ -1,27 +1,42 @@
-import define from '../define';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
 
 export const meta = {
-	requireCredential: false as const,
+	requireCredential: false,
 
 	tags: ['meta'],
 
-	params: {
-	},
-
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		properties: {
 			pong: {
-				type: 'number' as const,
-				optional: false as const, nullable: false as const,
+				type: 'number',
+				optional: false, nullable: false,
 			},
-		}
-	}
-};
+		},
+	},
+} as const;
 
-export default define(meta, async () => {
-	return {
-		pong: Date.now(),
-	};
-});
+export const paramDef = {
+	type: 'object',
+	properties: {},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+	) {
+		super(meta, paramDef, async () => {
+			return {
+				pong: Date.now(),
+			};
+		});
+	}
+}

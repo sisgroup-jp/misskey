@@ -1,28 +1,48 @@
-import $ from 'cafy';
-import define from '../../../define';
-import { Instances } from '@/models/index';
-import { toPuny } from '@/misc/convert-host';
-import { fetchInstanceMetadata } from '@/services/fetch-instance-metadata';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { InstancesRepository } from '@/models/_.js';
+import { FetchInstanceMetadataService } from '@/core/FetchInstanceMetadataService.js';
+import { UtilityService } from '@/core/UtilityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['admin'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 	requireModerator: true,
+	kind: 'write:admin:federation',
+} as const;
 
-	params: {
-		host: {
-			validator: $.str
-		},
+export const paramDef = {
+	type: 'object',
+	properties: {
+		host: { type: 'string' },
+	},
+	required: ['host'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.instancesRepository)
+		private instancesRepository: InstancesRepository,
+
+		private utilityService: UtilityService,
+		private fetchInstanceMetadataService: FetchInstanceMetadataService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const instance = await this.instancesRepository.findOneBy({ host: this.utilityService.toPuny(ps.host) });
+
+			if (instance == null) {
+				throw new Error('instance not found');
+			}
+
+			this.fetchInstanceMetadataService.fetchInstanceMetadata(instance, true);
+		});
 	}
-};
-
-export default define(meta, async (ps, me) => {
-	const instance = await Instances.findOne({ host: toPuny(ps.host) });
-
-	if (instance == null) {
-		throw new Error('instance not found');
-	}
-
-	fetchInstanceMetadata(instance, true);
-});
+}

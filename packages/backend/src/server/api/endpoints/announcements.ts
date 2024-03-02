@@ -1,92 +1,66 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../define';
-import { Announcements, AnnouncementReads } from '@/models/index';
-import { makePaginationQuery } from '../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Brackets } from 'typeorm';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { QueryService } from '@/core/QueryService.js';
+import { AnnouncementService } from '@/core/AnnouncementService.js';
+import { DI } from '@/di-symbols.js';
+import type { AnnouncementReadsRepository, AnnouncementsRepository } from '@/models/_.js';
 
 export const meta = {
 	tags: ['meta'],
 
-	requireCredential: false as const,
-
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		withUnreads: {
-			validator: $.optional.boolean,
-			default: false
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
-			properties: {
-				id: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'id',
-					example: 'xxxxxxxxxx',
-				},
-				createdAt: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-					format: 'date-time',
-				},
-				updatedAt: {
-					type: 'string' as const,
-					optional: false as const, nullable: true as const,
-					format: 'date-time',
-				},
-				text: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-				},
-				title: {
-					type: 'string' as const,
-					optional: false as const, nullable: false as const,
-				},
-				imageUrl: {
-					type: 'string' as const,
-					optional: false as const, nullable: true as const,
-				},
-				isRead: {
-					type: 'boolean' as const,
-					optional: false as const, nullable: false as const,
-				}
-			}
-		}
+			type: 'object',
+			optional: false, nullable: false,
+			ref: 'Announcement',
+		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		isActive: { type: 'boolean', default: true },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.announcementsRepository)
+		private announcementsRepository: AnnouncementsRepository,
+
+		@Inject(DI.announcementReadsRepository)
+		private announcementReadsRepository: AnnouncementReadsRepository,
+
+		private queryService: QueryService,
+		private announcementService: AnnouncementService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.announcementsRepository.createQueryBuilder('announcement'), ps.sinceId, ps.untilId)
+				.andWhere('announcement.isActive = :isActive', { isActive: ps.isActive })
+				.andWhere(new Brackets(qb => {
+					if (me) qb.orWhere('announcement.userId = :meId', { meId: me.id });
+					qb.orWhere('announcement.userId IS NULL');
+				}));
+
+			const announcements = await query.limit(ps.limit).getMany();
+
+			return this.announcementService.packMany(announcements, me);
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	const query = makePaginationQuery(Announcements.createQueryBuilder('announcement'), ps.sinceId, ps.untilId);
-
-	const announcements = await query.take(ps.limit!).getMany();
-
-	if (user) {
-		const reads = (await AnnouncementReads.find({
-			userId: user.id
-		})).map(x => x.announcementId);
-
-		for (const announcement of announcements) {
-			(announcement as any).isRead = reads.includes(announcement.id);
-		}
-	}
-
-	return ps.withUnreads ? announcements.filter((a: any) => !a.isRead) : announcements;
-});
+}

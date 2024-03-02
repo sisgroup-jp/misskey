@@ -1,6 +1,9 @@
-const { MigrationInterface, QueryRunner } = require("typeorm");
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 
-module.exports = class removeViaMobile1636697408073 {
+export class removeViaMobile1636697408073 {
     name = 'removeViaMobile1636697408073'
 
     async up(queryRunner) {

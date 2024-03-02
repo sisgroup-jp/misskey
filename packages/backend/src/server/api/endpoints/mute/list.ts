@@ -1,49 +1,61 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { makePaginationQuery } from '../../common/make-pagination-query';
-import { Mutings } from '@/models/index';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { MutingsRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { MutingEntityService } from '@/core/entities/MutingEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['account'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'read:mutes',
 
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 30
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-	},
-
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'Muting',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, me) => {
-	const query = makePaginationQuery(Mutings.createQueryBuilder('muting'), ps.sinceId, ps.untilId)
-		.andWhere(`muting.muterId = :meId`, { meId: me.id });
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+	},
+	required: [],
+} as const;
 
-	const mutings = await query
-		.take(ps.limit!)
-		.getMany();
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.mutingsRepository)
+		private mutingsRepository: MutingsRepository,
 
-	return await Mutings.packMany(mutings, me);
-});
+		private mutingEntityService: MutingEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.mutingsRepository.createQueryBuilder('muting'), ps.sinceId, ps.untilId)
+				.andWhere('muting.muterId = :meId', { meId: me.id });
+
+			const mutings = await query
+				.limit(ps.limit)
+				.getMany();
+
+			return await this.mutingEntityService.packMany(mutings, me);
+		});
+	}
+}

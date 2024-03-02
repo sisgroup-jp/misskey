@@ -1,138 +1,127 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import { readNotification } from '../../common/read-notification';
-import define from '../../define';
-import { makePaginationQuery } from '../../common/make-pagination-query';
-import { Notifications, Followings, Mutings, Users } from '@/models/index';
-import { notificationTypes } from '@/types';
-import read from '@/services/note/read';
-import { Brackets } from 'typeorm';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Brackets, In } from 'typeorm';
+import * as Redis from 'ioredis';
+import { Inject, Injectable } from '@nestjs/common';
+import type { NotesRepository } from '@/models/_.js';
+import { obsoleteNotificationTypes, notificationTypes, FilterUnionByProperty } from '@/types.js';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { NoteReadService } from '@/core/NoteReadService.js';
+import { NotificationEntityService } from '@/core/entities/NotificationEntityService.js';
+import { NotificationService } from '@/core/NotificationService.js';
+import { DI } from '@/di-symbols.js';
+import { IdService } from '@/core/IdService.js';
+import { MiNotification } from '@/models/Notification.js';
 
 export const meta = {
 	tags: ['account', 'notifications'],
 
-	requireCredential: true as const,
+	requireCredential: true,
+
+	limit: {
+		duration: 30000,
+		max: 30,
+	},
 
 	kind: 'read:notifications',
 
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-
-		following: {
-			validator: $.optional.bool,
-			default: false
-		},
-
-		unreadOnly: {
-			validator: $.optional.bool,
-			default: false
-		},
-
-		markAsRead: {
-			validator: $.optional.bool,
-			default: true
-		},
-
-		includeTypes: {
-			validator: $.optional.arr($.str.or(notificationTypes as unknown as string[])),
-		},
-
-		excludeTypes: {
-			validator: $.optional.arr($.str.or(notificationTypes as unknown as string[])),
-		}
-	},
-
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'Notification',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, user) => {
-	// includeTypes が空の場合はクエリしない
-	if (ps.includeTypes && ps.includeTypes.length === 0) {
-		return [];
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		markAsRead: { type: 'boolean', default: true },
+		// 後方互換のため、廃止された通知タイプも受け付ける
+		includeTypes: { type: 'array', items: {
+			type: 'string', enum: [...notificationTypes, ...obsoleteNotificationTypes],
+		} },
+		excludeTypes: { type: 'array', items: {
+			type: 'string', enum: [...notificationTypes, ...obsoleteNotificationTypes],
+		} },
+	},
+	required: [],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.redis)
+		private redisClient: Redis.Redis,
+
+		@Inject(DI.notesRepository)
+		private notesRepository: NotesRepository,
+
+		private idService: IdService,
+		private notificationEntityService: NotificationEntityService,
+		private notificationService: NotificationService,
+		private noteReadService: NoteReadService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			// includeTypes が空の場合はクエリしない
+			if (ps.includeTypes && ps.includeTypes.length === 0) {
+				return [];
+			}
+			// excludeTypes に全指定されている場合はクエリしない
+			if (notificationTypes.every(type => ps.excludeTypes?.includes(type))) {
+				return [];
+			}
+
+			const includeTypes = ps.includeTypes && ps.includeTypes.filter(type => !(obsoleteNotificationTypes).includes(type as any)) as typeof notificationTypes[number][];
+			const excludeTypes = ps.excludeTypes && ps.excludeTypes.filter(type => !(obsoleteNotificationTypes).includes(type as any)) as typeof notificationTypes[number][];
+
+			const limit = ps.limit + (ps.untilId ? 1 : 0) + (ps.sinceId ? 1 : 0); // untilIdに指定したものも含まれるため+1
+			const notificationsRes = await this.redisClient.xrevrange(
+				`notificationTimeline:${me.id}`,
+				ps.untilId ? this.idService.parse(ps.untilId).date.getTime() : '+',
+				ps.sinceId ? this.idService.parse(ps.sinceId).date.getTime() : '-',
+				'COUNT', limit);
+
+			if (notificationsRes.length === 0) {
+				return [];
+			}
+
+			let notifications = notificationsRes.map(x => JSON.parse(x[1][1])).filter(x => x.id !== ps.untilId && x !== ps.sinceId) as MiNotification[];
+
+			if (includeTypes && includeTypes.length > 0) {
+				notifications = notifications.filter(notification => includeTypes.includes(notification.type));
+			} else if (excludeTypes && excludeTypes.length > 0) {
+				notifications = notifications.filter(notification => !excludeTypes.includes(notification.type));
+			}
+
+			if (notifications.length === 0) {
+				return [];
+			}
+
+			// Mark all as read
+			if (ps.markAsRead) {
+				this.notificationService.readAllNotification(me.id);
+			}
+
+			const noteIds = notifications
+				.filter((notification): notification is FilterUnionByProperty<MiNotification, 'type', 'mention' | 'reply' | 'quote'> => ['mention', 'reply', 'quote'].includes(notification.type))
+				.map(notification => notification.noteId);
+
+			if (noteIds.length > 0) {
+				const notes = await this.notesRepository.findBy({ id: In(noteIds) });
+				this.noteReadService.read(me.id, notes);
+			}
+
+			return await this.notificationEntityService.packMany(notifications, me.id);
+		});
 	}
-	// excludeTypes に全指定されている場合はクエリしない
-	if (notificationTypes.every(type => ps.excludeTypes?.includes(type))) {
-		return [];
-	}
-	const followingQuery = Followings.createQueryBuilder('following')
-		.select('following.followeeId')
-		.where('following.followerId = :followerId', { followerId: user.id });
-
-	const mutingQuery = Mutings.createQueryBuilder('muting')
-		.select('muting.muteeId')
-		.where('muting.muterId = :muterId', { muterId: user.id });
-
-	const suspendedQuery = Users.createQueryBuilder('users')
-		.select('users.id')
-		.where('users.isSuspended = TRUE');
-
-	const query = makePaginationQuery(Notifications.createQueryBuilder('notification'), ps.sinceId, ps.untilId)
-		.andWhere(`notification.notifieeId = :meId`, { meId: user.id })
-		.leftJoinAndSelect('notification.notifier', 'notifier')
-		.leftJoinAndSelect('notification.note', 'note')
-		.leftJoinAndSelect('note.user', 'user')
-		.leftJoinAndSelect('note.reply', 'reply')
-		.leftJoinAndSelect('note.renote', 'renote')
-		.leftJoinAndSelect('reply.user', 'replyUser')
-		.leftJoinAndSelect('renote.user', 'renoteUser');
-
-	query.andWhere(new Brackets(qb => { qb
-		.where(`notification.notifierId NOT IN (${ mutingQuery.getQuery() })`)
-		.orWhere('notification.notifierId IS NULL');
-	}));
-	query.setParameters(mutingQuery.getParameters());
-
-	query.andWhere(new Brackets(qb => { qb
-		.where(`notification.notifierId NOT IN (${ suspendedQuery.getQuery() })`)
-		.orWhere('notification.notifierId IS NULL');
-	}));
-
-	if (ps.following) {
-		query.andWhere(`((notification.notifierId IN (${ followingQuery.getQuery() })) OR (notification.notifierId = :meId))`, { meId: user.id });
-		query.setParameters(followingQuery.getParameters());
-	}
-
-	if (ps.includeTypes && ps.includeTypes.length > 0) {
-		query.andWhere(`notification.type IN (:...includeTypes)`, { includeTypes: ps.includeTypes });
-	} else if (ps.excludeTypes && ps.excludeTypes.length > 0) {
-		query.andWhere(`notification.type NOT IN (:...excludeTypes)`, { excludeTypes: ps.excludeTypes });
-	}
-
-	if (ps.unreadOnly) {
-		query.andWhere(`notification.isRead = false`);
-	}
-
-	const notifications = await query.take(ps.limit!).getMany();
-
-	// Mark all as read
-	if (notifications.length > 0 && ps.markAsRead) {
-		readNotification(user.id, notifications.map(x => x.id));
-	}
-
-	const notes = notifications.filter(notification => ['mention', 'reply', 'quote'].includes(notification.type)).map(notification => notification.note!);
-
-	if (notes.length > 0) {
-		read(user.id, notes);
-	}
-
-	return await Notifications.packMany(notifications, user.id);
-});
+}

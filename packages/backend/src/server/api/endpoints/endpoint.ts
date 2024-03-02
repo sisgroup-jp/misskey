@@ -1,26 +1,56 @@
-import $ from 'cafy';
-import define from '../define';
-import endpoints from '../endpoints';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import endpoints from '../endpoints.js';
 
 export const meta = {
-	requireCredential: false as const,
+	requireCredential: false,
 
 	tags: ['meta'],
 
-	params: {
-		endpoint: {
-			validator: $.str,
-		}
+	res: {
+		type: 'object',
+		nullable: true,
+		properties: {
+			params: {
+				type: 'array',
+				items: {
+					type: 'object',
+					properties: {
+						name: { type: 'string' },
+						type: { type: 'string' },
+					},
+				},
+			},
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps) => {
-	const ep = endpoints.find(x => x.name === ps.endpoint);
-	if (ep == null) return null;
-	return {
-		params: Object.entries(ep.meta.params || {}).map(([k, v]) => ({
-			name: k,
-			type: v.validator.name === 'ID' ? 'String' : v.validator.name
-		}))
-	};
-});
+export const paramDef = {
+	type: 'object',
+	properties: {
+		endpoint: { type: 'string' },
+	},
+	required: ['endpoint'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+	) {
+		super(meta, paramDef, async (ps) => {
+			const ep = endpoints.find(x => x.name === ps.endpoint);
+			if (ep == null) return null;
+			return {
+				params: Object.entries(ep.params.properties ?? {}).map(([k, v]) => ({
+					name: k,
+					type: v.type ? v.type.charAt(0).toUpperCase() + v.type.slice(1) : 'string',
+				})),
+			};
+		});
+	}
+}

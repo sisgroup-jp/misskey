@@ -1,58 +1,66 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import define from '../../define';
-import { DriveFolders } from '@/models/index';
-import { makePaginationQuery } from '../../common/make-pagination-query';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { DriveFoldersRepository } from '@/models/_.js';
+import { QueryService } from '@/core/QueryService.js';
+import { DriveFolderEntityService } from '@/core/entities/DriveFolderEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['drive'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'read:drive',
 
-	params: {
-		limit: {
-			validator: $.optional.num.range(1, 100),
-			default: 10
-		},
-
-		sinceId: {
-			validator: $.optional.type(ID),
-		},
-
-		untilId: {
-			validator: $.optional.type(ID),
-		},
-
-		folderId: {
-			validator: $.optional.nullable.type(ID),
-			default: null,
-		}
-	},
-
 	res: {
-		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		type: 'array',
+		optional: false, nullable: false,
 		items: {
-			type: 'object' as const,
-			optional: false as const, nullable: false as const,
+			type: 'object',
+			optional: false, nullable: false,
 			ref: 'DriveFolder',
-		}
+		},
 	},
-};
+} as const;
 
-export default define(meta, async (ps, user) => {
-	const query = makePaginationQuery(DriveFolders.createQueryBuilder('folder'), ps.sinceId, ps.untilId)
-		.andWhere('folder.userId = :userId', { userId: user.id });
+export const paramDef = {
+	type: 'object',
+	properties: {
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
+		folderId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
+	},
+	required: [],
+} as const;
 
-	if (ps.folderId) {
-		query.andWhere('folder.parentId = :parentId', { parentId: ps.folderId });
-	} else {
-		query.andWhere('folder.parentId IS NULL');
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.driveFoldersRepository)
+		private driveFoldersRepository: DriveFoldersRepository,
+
+		private driveFolderEntityService: DriveFolderEntityService,
+		private queryService: QueryService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			const query = this.queryService.makePaginationQuery(this.driveFoldersRepository.createQueryBuilder('folder'), ps.sinceId, ps.untilId)
+				.andWhere('folder.userId = :userId', { userId: me.id });
+
+			if (ps.folderId) {
+				query.andWhere('folder.parentId = :parentId', { parentId: ps.folderId });
+			} else {
+				query.andWhere('folder.parentId IS NULL');
+			}
+
+			const folders = await query.limit(ps.limit).getMany();
+
+			return await Promise.all(folders.map(folder => this.driveFolderEntityService.pack(folder)));
+		});
 	}
-
-	const folders = await query.take(ps.limit!).getMany();
-
-	return await Promise.all(folders.map(folder => DriveFolders.pack(folder)));
-});
+}

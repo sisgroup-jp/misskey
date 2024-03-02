@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class clipDescription1605408848373 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class clipDescription1605408848373 {
     constructor() {
         this.name = 'clipDescription1605408848373';
     }
@@ -11,4 +14,3 @@ class clipDescription1605408848373 {
         await queryRunner.query(`ALTER TABLE "clip" DROP COLUMN "description"`);
     }
 }
-exports.clipDescription1605408848373 = clipDescription1605408848373;

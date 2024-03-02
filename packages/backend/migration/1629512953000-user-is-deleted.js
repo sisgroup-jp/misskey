@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class isUserDeleted1629512953000 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class isUserDeleted1629512953000 {
     constructor() {
         this.name = 'isUserDeleted1629512953000';
     }
@@ -12,4 +15,3 @@ class isUserDeleted1629512953000 {
         await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "isDeleted"`);
     }
 }
-exports.isUserDeleted1629512953000 = isUserDeleted1629512953000;

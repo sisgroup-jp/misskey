@@ -1,40 +1,54 @@
-import $ from 'cafy';
-import { ID } from '@/misc/cafy-id';
-import { rejectFollowRequest } from '@/services/following/reject';
-import define from '../../../define';
-import { ApiError } from '../../../error';
-import { getUser } from '../../../common/getters';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { GetterService } from '@/server/api/GetterService.js';
+import { UserFollowingService } from '@/core/UserFollowingService.js';
+import { ApiError } from '../../../error.js';
 
 export const meta = {
 	tags: ['following', 'account'],
 
-	requireCredential: true as const,
+	requireCredential: true,
 
 	kind: 'write:following',
-
-	params: {
-		userId: {
-			validator: $.type(ID),
-		}
-	},
 
 	errors: {
 		noSuchUser: {
 			message: 'No such user.',
 			code: 'NO_SUCH_USER',
-			id: 'abc2ffa6-25b2-4380-ba99-321ff3a94555'
+			id: 'abc2ffa6-25b2-4380-ba99-321ff3a94555',
 		},
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		userId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['userId'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		private getterService: GetterService,
+		private userFollowingService: UserFollowingService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			// Fetch follower
+			const follower = await this.getterService.getUser(ps.userId).catch(err => {
+				if (err.id === '15348ddd-432d-49c2-8a5a-8069753becff') throw new ApiError(meta.errors.noSuchUser);
+				throw err;
+			});
+
+			await this.userFollowingService.rejectFollowRequest(me, follower);
+
+			return;
+		});
 	}
-};
-
-export default define(meta, async (ps, user) => {
-	// Fetch follower
-	const follower = await getUser(ps.userId).catch(e => {
-		if (e.id === '15348ddd-432d-49c2-8a5a-8069753becff') throw new ApiError(meta.errors.noSuchUser);
-		throw e;
-	});
-
-	await rejectFollowRequest(user, follower);
-
-	return;
-});
+}

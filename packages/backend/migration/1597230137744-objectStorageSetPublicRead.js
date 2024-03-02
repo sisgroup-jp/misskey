@@ -1,6 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-class objectStorageSetPublicRead1597230137744 {
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export class objectStorageSetPublicRead1597230137744 {
     constructor() {
         this.name = 'objectStorageSetPublicRead1597230137744';
     }
@@ -11,4 +14,3 @@ class objectStorageSetPublicRead1597230137744 {
         await queryRunner.query(`ALTER TABLE "meta" DROP COLUMN "objectStorageSetPublicRead"`);
     }
 }
-exports.objectStorageSetPublicRead1597230137744 = objectStorageSetPublicRead1597230137744;

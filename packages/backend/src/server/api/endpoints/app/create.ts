@@ -1,63 +1,73 @@
-import $ from 'cafy';
-import define from '../../define';
-import { Apps } from '@/models/index';
-import { genId } from '@/misc/gen-id';
-import { unique } from '@/prelude/array';
-import { secureRndstr } from '@/misc/secure-rndstr';
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { AppsRepository } from '@/models/_.js';
+import { IdService } from '@/core/IdService.js';
+import { unique } from '@/misc/prelude/array.js';
+import { secureRndstr } from '@/misc/secure-rndstr.js';
+import { AppEntityService } from '@/core/entities/AppEntityService.js';
+import { DI } from '@/di-symbols.js';
 
 export const meta = {
 	tags: ['app'],
 
-	requireCredential: false as const,
-
-	params: {
-		name: {
-			validator: $.str,
-		},
-
-		description: {
-			validator: $.str,
-		},
-
-		permission: {
-			validator: $.arr($.str).unique(),
-		},
-
-		// TODO: Check it is valid url
-		callbackUrl: {
-			validator: $.optional.nullable.str,
-			default: null,
-		},
-	},
+	requireCredential: false,
 
 	res: {
-		type: 'object' as const,
-		optional: false as const, nullable: false as const,
+		type: 'object',
+		optional: false, nullable: false,
 		ref: 'App',
 	},
-};
+} as const;
 
-export default define(meta, async (ps, user) => {
-	// Generate secret
-	const secret = secureRndstr(32, true);
+export const paramDef = {
+	type: 'object',
+	properties: {
+		name: { type: 'string' },
+		description: { type: 'string' },
+		permission: { type: 'array', uniqueItems: true, items: {
+			type: 'string',
+		} },
+		callbackUrl: { type: 'string', nullable: true },
+	},
+	required: ['name', 'description', 'permission'],
+} as const;
 
-	// for backward compatibility
-	const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')));
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.appsRepository)
+		private appsRepository: AppsRepository,
 
-	// Create account
-	const app = await Apps.save({
-		id: genId(),
-		createdAt: new Date(),
-		userId: user ? user.id : null,
-		name: ps.name,
-		description: ps.description,
-		permission,
-		callbackUrl: ps.callbackUrl,
-		secret: secret
-	});
+		private appEntityService: AppEntityService,
+		private idService: IdService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			// Generate secret
+			const secret = secureRndstr(32);
 
-	return await Apps.pack(app, null, {
-		detail: true,
-		includeSecret: true
-	});
-});
+			// for backward compatibility
+			const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')));
+
+			// Create account
+			const app = await this.appsRepository.insert({
+				id: this.idService.gen(),
+				userId: me ? me.id : null,
+				name: ps.name,
+				description: ps.description,
+				permission,
+				callbackUrl: ps.callbackUrl,
+				secret: secret,
+			}).then(x => this.appsRepository.findOneByOrFail(x.identifiers[0]));
+
+			return await this.appEntityService.pack(app, null, {
+				detail: true,
+				includeSecret: true,
+			});
+		});
+	}
+}
